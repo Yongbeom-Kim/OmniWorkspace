@@ -151,9 +151,17 @@ cmd__workspace() {
 		shift
 		cmd__workspace__add "$@"
 		;;
+	"add" | "remove-repo")
+		shift
+		cmd__workspace__remove_repo "$@"
+		;;
 	"delete")
 		shift
 		cmd__workspace__delete "$@"
+		;;
+	"list")
+		shift
+		cmd__workspace__list "$@"
 		;;
 	*)
 		echo "Unknown sub-command: ${1:-}. Available sub-commands: add, remove, list"
@@ -182,7 +190,15 @@ cmd__workspace__list() {
 }
 
 cmd__workspace__remove_repo() {
-    echo "remove repo"
+    local workspace_name="${1:?"workspace name is required"}"
+	shift
+	local repos_to_remove=("$@")
+
+    if [[ ${#repos_to_remove[@]} -eq 0 ]]; then
+        warn "No repos to remove from workspace $workspace_name"
+    fi
+    
+    workspace__remove_repo "$workspace_name" "${repos_to_remove[@]}"
 }
 
 ####################
@@ -309,6 +325,19 @@ workspace__list() {
 	print_table_vertically 2 "workspace" "${workspaces[@]+"${workspaces[@]}"}" "repos" "${cells[@]+"${cells[@]}"}"
 }
 
+workspace__remove_repo() {
+    local workspace_name="${1:?"workspace name is required"}"
+	shift
+	# we checked this in cmd__workspace__remove_repo, so guaranteed to have value
+	local repos_to_remove=("$@")
+
+	for repo in "${repos_to_remove[@]+"${repos_to_remove[@]}"}"; do
+        if ! config__workspace__remove_repo_idempotent "$workspace_name" "$repo"; then
+            warn "Failed to remove repo $repo from workspace $workspace_name"
+        fi
+    done
+}
+
 ######################################
 ##### High-Level Repo Management #####
 ######################################
@@ -428,6 +457,10 @@ repo__validate_all() {
 
 CONFIG_FILE_PATH="$PROJ_DIR/config.yaml"
 
+#############################
+### Yaml Workspace Config ###
+#############################
+
 config__workspace__create_idempotent() {
 	debug $LINENO "[config__workspace__add]" "$*"
 	config__create_file_if_not_exist
@@ -474,6 +507,20 @@ config__workspace__add_repo_idempotent() {
     yq -i ".workspaces.${workspace_name}.repos += [\"$repo_name\"]" "$CONFIG_FILE_PATH"
 }
 
+config__workspace__remove_repo_idempotent() {
+	debug $LINENO "[config__workspace__add]" "$*"
+	config__create_file_if_not_exist
+	local workspace_name="$1"
+    local repo_name="$2"
+
+    if ! config__workspace__has_repo "$workspace_name" "$repo_name"; then
+        warn "Removing repo $repo_name from workspace $workspace_name: does not exist"
+        return 0
+    fi
+
+    yq -i "del(.workspaces.${workspace_name}.repos[] | select(. == \"$repo_name\"))" "$CONFIG_FILE_PATH"
+}
+
 config__workspace__exists() {
 	debug $LINENO "[config__workspace__exists]" "$*"
 	config__create_file_if_not_exist
@@ -489,16 +536,11 @@ config__workspace__has_repo() {
 	local repo_name="$2"
     local repos=($(config__workspace__get_repos "$workspace_name"))
 
-    debug $LINENO TEST_repos "${repos[@]+"${repos[@]}"}"
-
-    for repo in "${repos[@]+"${repos[@]}"}"; do
-    debug $LINENO TEST repo_name repo "$repo_name" "$repo"
-        if [[ "$repo_name" == "$repo" ]]; then
-            return 0
-        fi
-    done
-
-    return 1
+    if [[ -n $(yq ".workspaces.${workspace_name}.repos[] | select(. == \"$repo_name\")" "$CONFIG_FILE_PATH") ]]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 config__workspace__list() {
@@ -530,6 +572,11 @@ config__workspace__get_repos() {
         echo $return
     fi
 }
+
+
+########################
+### Yaml Repo Config ###
+########################
 
 config__repo__set() {
 	debug $LINENO "[config__repo__set]" "$*"
