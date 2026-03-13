@@ -182,7 +182,7 @@ cmd__workspace() {
 		cmd__workspace__exec "$@"
 		;;
 	*)
-		echo "Unknown sub-command: ${1:-}. Available sub-commands: add, remove, list"
+		echo "Unknown sub-command: ${1:-}. Available sub-commands: add, remove, list, exec"
 		exit 1
 		;;
 	esac
@@ -417,10 +417,9 @@ workspace__exec() {
 
     local workspace_name="${1:?"workspace name is required"}"
 	shift
-	local args=("$@")
 
 	local workspace_dir="$(fs__workspace_mkdir "$workspace_name")"
-	cd "$workspace_dir" && "${args[@]}"
+	cd "$workspace_dir" && "$@"
 }
 
 workspace__validate_all() {
