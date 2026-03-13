@@ -170,7 +170,6 @@ cmd__workspace__list() {
     workspace__list
 }
 # remove
-# list
 # info
 # add_repo
 # remove_repo
@@ -287,7 +286,7 @@ workspace__list() {
 		cells+=("$cell")
 	done
 
-	print_table_vertically 2 "workspace" "repos" "${workspaces[@]+"${workspaces[@]}"}" "${cells[@]+"${cells[@]}"}"
+	print_table_vertically 2 "workspace" "${workspaces[@]+"${workspaces[@]}"}" "repos" "${cells[@]+"${cells[@]}"}"
 }
 
 ######################################
