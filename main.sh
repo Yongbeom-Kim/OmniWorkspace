@@ -147,7 +147,7 @@ main() {
 cmd__workspace() {
 	debug $LINENO "[cmd__repo]" "$*"
 	case ${1:-} in
-	"add")
+	"add" | "add-repo")
 		shift
 		cmd__workspace__add "$@"
 		;;
@@ -248,14 +248,23 @@ workspace__add() {
 	shift
 	local workspace_repos=("$@")
 
-    if config__workspace__exists "$workspace_name"; then 
-        warn "Workspace $workspace_name already exists."
+    if ! config__workspace__create_idempotent "$workspace_name"; then
+        warn "Failed to create workspace $workspace_name."
         return 1
     fi
 
-	if ! config__workspace__set "$workspace_name" "${workspace_repos[@]}"; then
-        warn "Failed to add Workspace $workspace_name."
-    fi
+    for repo in "${workspace_repos[@]+"${workspace_repos[@]}"}"; do
+        if [[ -z $repo ]]; then
+            continue
+        fi
+        if ! config__workspace__add_repo_idempotent "$workspace_name" "$repo"; then
+            warn "Failed to add repo $repo to workspace $workspace_name."
+            return 1
+        fi
+
+        echo "Successfully added repo $repo to workspace $workspace_name."
+    done
+
 }
 
 workspace__list() {
@@ -400,33 +409,63 @@ repo__validate_all() {
 
 CONFIG_FILE_PATH="$PROJ_DIR/config.yaml"
 
-config__workspace__set() {
-	debug $LINENO "[config__workspace__set]" "$*"
+config__workspace__create_idempotent() {
+	debug $LINENO "[config__workspace__add]" "$*"
 	config__create_file_if_not_exist
 
 	local workspace_name="$1"
-	shift
-	local workspace_repos=("$@")
-	local workspace_repos_len=${#workspace_repos[@]}
 
-	repos_array_str="["
+    if config__workspace__exists "$workspace_name"; then
+        warn "Creating workspace $workspace_name: already exists"
+        return 0
+    fi
 
-	for ((i = 0; i < $workspace_repos_len - 1; i++)); do
-		repos_array_str+="\"${workspace_repos[i]}\", "
-	done
-	repos_array_str+="\"${workspace_repos[$((workspace_repos_len - 1))]}\""
+    yq -i ".workspaces.${workspace_name}.repos = []" "$CONFIG_FILE_PATH"
+    if [ $? -ne 0 ]; then
+        echo "Failed to create new workspace ${workspace_name}"
+    fi
 
-	repos_array_str+="]"
+}
 
-    debug $LINENO TEST $repos_array_str
-	yq -i ".workspaces.${workspace_name}.repos = ${repos_array_str}" "$CONFIG_FILE_PATH"
+config__workspace__add_repo_idempotent() {
+	debug $LINENO "[config__workspace__add]" "$*"
+	config__create_file_if_not_exist
+	local workspace_name="$1"
+    local repo_name="$2"
+
+    if config__workspace__has_repo "$workspace_name" "$repo_name"; then
+        warn "Adding repo $repo_name to workspace $workspace_name: already exists"
+        return 0
+    fi
+
+    yq -i ".workspaces.${workspace_name}.repos += [\"$repo_name\"]" "$CONFIG_FILE_PATH"
 }
 
 config__workspace__exists() {
 	debug $LINENO "[config__workspace__exists]" "$*"
 	config__create_file_if_not_exist
-	local workspace_name=${1:?}
+	local workspace_name="$1"
 	yq -e ".workspaces.${workspace_name}" "$CONFIG_FILE_PATH" &>/dev/null
+}
+
+config__workspace__has_repo() {
+	debug $LINENO "[config__workspace__exists]" "$*"
+	config__create_file_if_not_exist
+
+	local workspace_name="$1"
+	local repo_name="$2"
+    local repos=($(config__workspace__get_repos "$workspace_name"))
+
+    debug $LINENO TEST_repos "${repos[@]+"${repos[@]}"}"
+
+    for repo in "${repos[@]+"${repos[@]}"}"; do
+    debug $LINENO TEST repo_name repo "$repo_name" "$repo"
+        if [[ "$repo_name" == "$repo" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 config__workspace__list() {
