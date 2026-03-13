@@ -86,6 +86,14 @@ warn() {
 	echo -e "[WARN] $*" >&2
 }
 
+info() {
+	if [[ -z ${DEBUG:-} ]]; then
+		echo -e "$*" >&2
+	else
+		echo -e "[INFO] $*" >&2
+	fi
+}
+
 debug() {
 	if [[ -z ${DEBUG:-} ]]; then
 		return 0
@@ -151,6 +159,7 @@ main() {
 
 cmd__workspace() {
 	debug $LINENO "[cmd__repo]" "$*"
+
 	case ${1:-} in
 	"add" | "add-repo")
 		shift
@@ -177,6 +186,12 @@ cmd__workspace() {
 
 # Functions as both "create workspace" and "add repo to workspace"
 cmd__workspace__add() {
+	local curr_workplace
+	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace) ; then
+		info "Workspace detected as $curr_workspace"
+		shift -- "$curr_workspace" "$@"
+	fi
+
 	local workspace_name="${1:?"workspace name is required"}"
 	shift
 	local workspace_repos=("$@")
@@ -185,8 +200,12 @@ cmd__workspace__add() {
 }
 
 cmd__workspace__delete() {
-	local workspace_name="${1:?"workspace name is required"}"
-    
+	local curr_workplace
+	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace) ; then
+		info "Workspace detected as $curr_workspace"
+		shift -- "$curr_workspace" "$@"
+	fi
+
     workspace__delete $workspace_name
 }
 
@@ -195,6 +214,12 @@ cmd__workspace__list() {
 }
 
 cmd__workspace__remove_repo() {
+	local curr_workplace
+	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace) ; then
+		info "Workspace detected as $curr_workspace"
+		shift -- "$curr_workspace" "$@"
+	fi
+
     local workspace_name="${1:?"workspace name is required"}"
 	shift
 	local repos_to_remove=("$@")
@@ -237,14 +262,14 @@ cmd__repo() {
 cmd__repo__add() {
 	debug $LINENO "[cmd__repo__add]" "$*"
 	local repo_url=$1
-	local repo_name
+	local repo_name=${2:-}
 
-	if ! repo_name=$(git__get_repo_name "$repo_url"); then
+	if [[ -z "$repo_name" ]] && ! repo_name_from_url=$(git__get_repo_name "$repo_url"); then
 		warn "Failed to get repository name from URL: $repo_url"
 		return 1
 	fi
 
-	local repo_name=${2:-$repo_name}
+	local repo_name=${repo_name:-$repo_name_from_url}
 
 	repo__add "$repo_url" "$repo_name"
 }
@@ -334,7 +359,7 @@ workspace__list() {
 	local cells=()
 
 	for workspace in "${workspaces[@]+"${workspaces[@]}"}"; do
-		if [[ -z workspace ]]; then 
+		if [[ -z "$workspace" ]]; then 
 			continue
 		fi
 		local repos=($(config__workspace__get_repos "$workspace"))
@@ -850,6 +875,16 @@ const__get_repo_dir() {
 env_is_macos() {
 	debug $LINENO "[env_is_macos]" "$*"
 	[[ "$(uname)" == "Darwin" ]]
+}
+
+env__get_caller_workspace() {
+	if [[ "$PWD" == $WORKSPACES_DIR/* ]]; then
+        local temp="${PWD#$WORKSPACES_DIR/}"
+        echo "${temp%%/*}"
+        return 0
+	else
+		return 1
+	fi
 }
 
 print_table_vertically() {
