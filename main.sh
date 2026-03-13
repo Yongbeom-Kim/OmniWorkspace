@@ -177,6 +177,10 @@ cmd__workspace() {
 		shift
 		cmd__workspace__list "$@"
 		;;
+	"exec")
+		shift
+		cmd__workspace__exec "$@"
+		;;
 	*)
 		echo "Unknown sub-command: ${1:-}. Available sub-commands: add, remove, list"
 		exit 1
@@ -186,10 +190,10 @@ cmd__workspace() {
 
 # Functions as both "create workspace" and "add repo to workspace"
 cmd__workspace__add() {
-	local curr_workplace
+	local curr_workspace
 	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace) ; then
 		info "Workspace detected as $curr_workspace"
-		shift -- "$curr_workspace" "$@"
+		set -- "$curr_workspace" "$@"
 	fi
 
 	local workspace_name="${1:?"workspace name is required"}"
@@ -200,10 +204,10 @@ cmd__workspace__add() {
 }
 
 cmd__workspace__delete() {
-	local curr_workplace
+	local curr_workspace
 	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace) ; then
 		info "Workspace detected as $curr_workspace"
-		shift -- "$curr_workspace" "$@"
+		set -- "$curr_workspace" "$@"
 	fi
 
     workspace__delete $workspace_name
@@ -214,10 +218,10 @@ cmd__workspace__list() {
 }
 
 cmd__workspace__remove_repo() {
-	local curr_workplace
+	local curr_workspace
 	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace) ; then
 		info "Workspace detected as $curr_workspace"
-		shift -- "$curr_workspace" "$@"
+		set -- "$curr_workspace" "$@"
 	fi
 
     local workspace_name="${1:?"workspace name is required"}"
@@ -230,6 +234,20 @@ cmd__workspace__remove_repo() {
     fi
     
     workspace__remove_repo "$workspace_name" "${repos_to_remove[@]}"
+}
+
+cmd__workspace__exec() {
+	local curr_workspace
+	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace) ; then
+		info "Workspace detected as $curr_workspace"
+		set -- "$curr_workspace" "$@"
+	fi
+
+    local workspace_name="${1:?"workspace name is required"}"
+	shift
+	local args=("$@")
+
+	workspace__exec "$workspace_name" "${args[@]}"
 }
 
 ####################
@@ -393,6 +411,18 @@ workspace__remove_repo() {
 	# TODO: delete the repo's particular worktree
 }
 
+workspace__exec() {
+	debug $LINENO "[workspace__exec]" "$*"
+	workspace__validate_all
+
+    local workspace_name="${1:?"workspace name is required"}"
+	shift
+	local args=("$@")
+
+	local workspace_dir="$(fs__workspace_mkdir "$workspace_name")"
+	cd "$workspace_dir" && "${args[@]}"
+}
+
 workspace__validate_all() {
 	debug $LINENO "[workspace__validate_all]" "$*"
 	local workspaces=($(config__workspace__list))
@@ -428,7 +458,6 @@ workspace__validate() {
 			continue
 		fi
 	done
-	
 }
 
 ######################################
