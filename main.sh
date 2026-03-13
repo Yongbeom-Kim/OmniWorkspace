@@ -73,6 +73,7 @@ ERASE_SCREEN_START='\033[1J' # Erase from cursor to start of screen
 
 PROJ_DIR="${PROJ_DIR:-$HOME/.ows}"
 REPOS_DIR="${REPOS_DIR:-$PROJ_DIR/repos}"
+WORKSPACES_DIR="${REPOS_DIR:-$PROJ_DIR/repos}"
 
 trap 'echo "Error on line $LINENO in ${FUNCNAME[0]:-main}" >&2; debug_stack_trace' ERR
 
@@ -112,11 +113,19 @@ main() {
 	local cmd="${1:-}"
 
 	case "$cmd" in
-	"repos")
+	"workspaces" | "wss")
+		shift
+		cmd__workspace__list "$@"
+		;;
+	"workspace" | "ws" | "w" | "wsp")
+		shift
+		cmd__workspace "$@"
+		;;
+	"repos" | "rs")
 		shift
 		cmd__repo__list "$@"
 		;;
-	"repo")
+	"repo" | "r")
 		shift
 		cmd__repo "$@"
 		;;
@@ -135,12 +144,31 @@ main() {
 ### Workspaces ###
 ####################
 
-# cmd__workspace() {
-#     debug $LINENO "[cmd__repo]" "$*"
+cmd__workspace() {
+	debug $LINENO "[cmd__repo]" "$*"
+	case ${1:-} in
+	"add")
+		shift
+		cmd__workspace__add "$@"
+		;;
+	*)
+		echo "Unknown sub-command: ${1:-}. Available sub-commands: add, remove, list"
+		exit 1
+		;;
+	esac
+}
 
-# }
+cmd__workspace__add() {
+	local workspace_name="${1:?"workspace name is required"}"
+	shift
+	local workspace_repos=("$@")
 
-# add
+	workspace__add $workspace_name "${workspace_repos[@]}"
+}
+
+cmd__workspace__list() {
+    workspace__list
+}
 # remove
 # list
 # info
@@ -197,19 +225,60 @@ cmd__repo__remove() {
 
 cmd__repo__list() {
 	debug $LINENO "[cmd__repo__list]" "$*"
-	config__repo__create_file_if_not_exist
-
-	local config_path="$REPOS_DIR/config.yaml"
 	local repos=($(config__repo__list))
-
 	local cells=()
-	for repo in "${repos[@]}"; do
-		cells+=("$repo")
-		cells+=("$(config__repo__get_originurl "$repo")")
-		cells+=("$(config__repo__get_dir "$repo")")
+
+    # funny syntax to avoid throw on empty array
+    for repo in "${repos[@]+"${repos[@]}"}"; do
+        cells+=("$repo")
+        cells+=("$(config__repo__get_originurl "$repo")")
+        cells+=("$(config__repo__get_dir "$repo")")
+    done
+
+	print_table_horizontally 3 "repo" "origin" "directory" "${cells[@]+"${cells[@]}"}"
+}
+
+###########################################
+##### High-Level Workspace Management #####
+###########################################
+
+workspace__add() {
+	debug $LINENO "[workspace__add]" "$*"
+	local workspace_name="$1"
+	shift
+	local workspace_repos=("$@")
+
+    if config__workspace__exists "$workspace_name"; then 
+        warn "Workspace $workspace_name already exists."
+        return 1
+    fi
+
+	if ! config__workspace__set "$workspace_name" "${workspace_repos[@]}"; then
+        warn "Failed to add Workspace $workspace_name."
+    fi
+}
+
+workspace__list() {
+	debug $LINENO "[workspace__list]" "$*"
+	local workspaces=($(config__workspace__list))
+	local cells=()
+
+	for workspace in "${workspaces[@]+"${workspaces[@]}"}"; do
+		if [[ -z workspace ]]; then 
+			continue
+		fi
+		local repos=($(config__workspace__get_repos "$workspace"))
+		local cell=""
+		for i in "${!repos[@]}"; do
+			cell+="${repos[$i]}"
+			if [[ i -lt $(( ${#repos[@]} - 1)) ]]; then
+				cell+=", "
+			fi
+		done
+		cells+=("$cell")
 	done
 
-	print_table 3 "repo" "origin" "directory" "${cells[@]}"
+	print_table_vertically 2 "workspace" "repos" "${workspaces[@]+"${workspaces[@]}"}" "${cells[@]+"${cells[@]}"}"
 }
 
 ######################################
@@ -249,17 +318,14 @@ repo__remove() {
 	# Configs are always the source of truth, so we always remove from config first.
 	if ! rm -rf "$repo_dir"; then
 		warn "Failed to remove repository $repo_alias."
-		return 1
 	fi
 
 	if ! [[ -d "$repo_dir" ]]; then
 		warn "Repository $repo_alias does not exist."
-		return 1
 	fi
 
 	if ! config__repo__remove "$repo_alias"; then
 		warn "Failed to remove repository $repo_alias from config."
-		return 1
 	fi
 
 	echo "Repository $repo_alias removed successfully."
@@ -268,10 +334,15 @@ repo__remove() {
 # Validate all repos.
 repo__validate_all() {
 	debug $LINENO "[repo__validate_all]" "$*"
-	config__repo__create_file_if_not_exist
+	config__create_file_if_not_exist
 
 	# 1. Validate repo config
 	config__repo__list | while read -r repo_alias; do
+        # Funny bash business AGAIN for arrays
+        if [[ -z $repo_alias ]]; then
+            continue
+        fi
+
 		local repo_dir=$(config__repo__get_dir "$repo_alias")
 		# 1. if no repo dir, remove from config
 		if [[ -z "$repo_dir" ]]; then
@@ -327,49 +398,108 @@ repo__validate_all() {
 ##### Yaml Configurations #####
 ###############################
 
-config__repo__create_file_if_not_exist() {
-	debug $LINENO "[config__repo__create_file_if_not_exist]" "$*"
-	local config_path="$REPOS_DIR/config.yaml"
-	if [[ ! -f "$config_path" ]]; then
-		mkdir -p "$REPOS_DIR"
-		touch "$config_path"
-	fi
+CONFIG_FILE_PATH="$PROJ_DIR/config.yaml"
+
+config__workspace__set() {
+	debug $LINENO "[config__workspace__set]" "$*"
+	config__create_file_if_not_exist
+
+	local workspace_name="$1"
+	shift
+	local workspace_repos=("$@")
+	local workspace_repos_len=${#workspace_repos[@]}
+
+	repos_array_str="["
+
+	for ((i = 0; i < $workspace_repos_len - 1; i++)); do
+		repos_array_str+="\"${workspace_repos[i]}\", "
+	done
+	repos_array_str+="\"${workspace_repos[$((workspace_repos_len - 1))]}\""
+
+	repos_array_str+="]"
+
+    debug $LINENO TEST $repos_array_str
+	yq -i ".workspaces.${workspace_name}.repos = ${repos_array_str}" "$CONFIG_FILE_PATH"
+}
+
+config__workspace__exists() {
+	debug $LINENO "[config__workspace__exists]" "$*"
+	config__create_file_if_not_exist
+	local workspace_name=${1:?}
+	yq -e ".workspaces.${workspace_name}" "$CONFIG_FILE_PATH" &>/dev/null
+}
+
+config__workspace__list() {
+	debug $LINENO "[config__workspace__list]" "$*"
+	config__create_file_if_not_exist
+	
+    local return=$(yq '.workspaces | keys | .[]' "$CONFIG_FILE_PATH")
+
+    if [[ return == "null" ]]; then
+        echo ""
+        return 0
+    else
+        echo $return
+    fi
+}
+
+config__workspace__get_repos() {
+	debug $LINENO "[config__workspace__get_repos]" "$*"
+	config__create_file_if_not_exist
+
+    local workspace="${1:?}"
+
+    local return=$(yq ".workspaces.${workspace}.repos[]" "$CONFIG_FILE_PATH")
+
+    if [[ return == "null" ]]; then
+        echo ""
+        return 0
+    else
+        echo $return
+    fi
 }
 
 config__repo__set() {
 	debug $LINENO "[config__repo__set]" "$*"
-	config__repo__create_file_if_not_exist
+	config__create_file_if_not_exist
 
 	local repo_url=${1:?}
 	local repo_alias=${2:?}
 	local repo_dir=${3:?}
 
-	local config_path="$REPOS_DIR/config.yaml"
 	# yq eval ".repos += [{name: \"$repo_alias\", url: \"$repo_url\"}]" -i "$config_path"
-	yq -i ".repos.${repo_alias} = {\"origin_url\": \"$repo_url\", \"dir\": \"$repo_dir\"}" "$config_path"
+	yq -i ".repos.${repo_alias} = {\"origin_url\": \"$repo_url\", \"dir\": \"$repo_dir\"}" "$CONFIG_FILE_PATH"
 }
 
 config__repo__remove() {
 	debug $LINENO "[config__repo__remove]" "$*"
-	config__repo__create_file_if_not_exist
+	config__create_file_if_not_exist
 	local repo_alias=${1:?}
 
-	local config_path="$REPOS_DIR/config.yaml"
-	yq -i "del(.repos.${repo_alias})" "$config_path"
+	yq -i "del(.repos.${repo_alias})" "$CONFIG_FILE_PATH"
 }
 
 config__repo__list() {
 	debug $LINENO "[config__repo__list]" "$*"
-	config__repo__create_file_if_not_exist
-	yq '.repos | keys | .[]' "$REPOS_DIR/config.yaml"
+	config__create_file_if_not_exist
+	
+    local return=$(yq '.repos | keys | .[]' "$CONFIG_FILE_PATH")
+
+    if [[ return == "null" ]]; then
+        echo ""
+        return 0
+    else
+        echo $return
+    fi
 }
 
 config__repo__get_dir() {
 	debug $LINENO "[config__repo__get_dir]" "$*"
-	config__repo__create_file_if_not_exist
+	config__create_file_if_not_exist
+    debug_stack_trace
 	local repo_alias=${1:?}
 
-	local config_path="$REPOS_DIR/config.yaml"
+	local config_path="$CONFIG_FILE_PATH"
 	local return=$(yq -r ".repos.${repo_alias}.dir" "$config_path")
 	if [[ "$return" == "null" ]]; then
 		echo ""
@@ -380,15 +510,21 @@ config__repo__get_dir() {
 
 config__repo__get_originurl() {
 	debug $LINENO "[config__repo__get_originurl]" "$*"
-	config__repo__create_file_if_not_exist
+	config__create_file_if_not_exist
 	local repo_alias=${1:?}
 
-	local config_path="$REPOS_DIR/config.yaml"
-	local return=$(yq -r ".repos.${repo_alias}.origin_url" "$config_path")
+	local return=$(yq -r ".repos.${repo_alias}.origin_url" "$CONFIG_FILE_PATH")
 	if [[ "$return" == "null" ]]; then
 		echo ""
 	else
 		echo "$return"
+	fi
+}
+
+config__create_file_if_not_exist() {
+	if [[ ! -f "$CONFIG_FILE_PATH" ]]; then
+		mkdir -p "$REPOS_DIR"
+		touch "$CONFIG_FILE_PATH"
 	fi
 }
 
@@ -480,8 +616,8 @@ env_is_macos() {
 	[[ "$(uname)" == "Darwin" ]]
 }
 
-print_table() {
-	debug $LINENO "[print_table]" "$*"
+print_table_horizontally() {
+	debug $LINENO "[print_table_horizontally]" "$*"
 	local n_cols=${1:?}
 	shift
 	local cells=("$@")
@@ -520,6 +656,36 @@ print_table() {
 		fi
 	done
 	printf "\n"
+}
+
+print_table_vertically() {
+	debug $LINENO "[print_table_vertically]" "$*"
+	local n_cols=${1:?}
+	shift
+
+	local n_cells="$#"
+	local cells=("$@")
+
+	local n_rows=$(( n_cells / n_cols ))
+	local leftover_cells=$(( n_cells % n_rows ))
+
+	if [[ $leftover_cells -ne 0 ]]; then
+		warn "Table has leftover cells: $leftover_cells"
+		return 1
+	fi
+
+	# We can just transpose and print horizontally
+	local transposed_cells=()
+
+	for ((r=0; r < $n_rows; r++)); do
+		for ((c=0; c < $n_cols; c++)); do
+			local cell_idx=$(( c * n_rows + r ))
+			transposed_cells+=("${cells[$cell_idx]}")
+		done
+	done
+
+	print_table_horizontally $n_cols "${transposed_cells[@]+"${transposed_cells[@]}"}"
+
 }
 
 main "$@"
