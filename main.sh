@@ -73,9 +73,14 @@ ERASE_SCREEN_START='\033[1J' # Erase from cursor to start of screen
 
 PROJ_DIR="${PROJ_DIR:-$HOME/.ows}"
 REPOS_DIR="${REPOS_DIR:-$PROJ_DIR/repos}"
-WORKSPACES_DIR="${REPOS_DIR:-$PROJ_DIR/repos}"
+WORKSPACES_DIR="${WORKSPACES_DIR:-$PROJ_DIR/workspaces}"
 
 trap 'echo "Error on line $LINENO in ${FUNCNAME[0]:-main}" >&2; debug_stack_trace' ERR
+
+fatal() {
+	echo -e "[FATAL] $*" >&2
+	debug_stack_trace
+}
 
 warn() {
 	echo -e "[WARN] $*" >&2
@@ -151,7 +156,7 @@ cmd__workspace() {
 		shift
 		cmd__workspace__add "$@"
 		;;
-	"add" | "remove-repo")
+	"remove-repo")
 		shift
 		cmd__workspace__remove_repo "$@"
 		;;
@@ -196,6 +201,7 @@ cmd__workspace__remove_repo() {
 
     if [[ ${#repos_to_remove[@]} -eq 0 ]]; then
         warn "No repos to remove from workspace $workspace_name"
+        return 0
     fi
     
     workspace__remove_repo "$workspace_name" "${repos_to_remove[@]}"
@@ -207,6 +213,7 @@ cmd__workspace__remove_repo() {
 
 cmd__repo() {
 	debug $LINENO "[cmd__repo]" "$*"
+	repo__validate_all
 	case ${1:-} in
 	"add")
 		shift
@@ -237,20 +244,21 @@ cmd__repo__add() {
 		return 1
 	fi
 
-	local repo_alias=${2:-$repo_name}
+	local repo_name=${2:-$repo_name}
 
-	repo__add "$repo_url" "$repo_alias"
+	repo__add "$repo_url" "$repo_name"
 }
 
 cmd__repo__remove() {
 	debug $LINENO "[cmd__repo__remove]" "$*"
-	local repo_alias=$1
+	local repo_name=$1
 
-	repo__remove "$repo_alias"
+	repo__remove "$repo_name"
 }
 
 cmd__repo__list() {
 	debug $LINENO "[cmd__repo__list]" "$*"
+	repo__validate_all
 	local repos=($(config__repo__list))
 	local cells=()
 
@@ -270,6 +278,9 @@ cmd__repo__list() {
 
 workspace__add() {
 	debug $LINENO "[workspace__add]" "$*"
+	workspace__validate_all
+	repo__validate_all
+
 	local workspace_name="$1"
 	shift
 	local workspace_repos=("$@")
@@ -278,32 +289,47 @@ workspace__add() {
         warn "Failed to create workspace $workspace_name."
         return 1
     fi
+	
+	local workspace_dir=$(fs__workspace_mkdir "$workspace_name")
 
     for repo in "${workspace_repos[@]+"${workspace_repos[@]}"}"; do
         if [[ -z $repo ]]; then
             continue
         fi
         if ! config__workspace__add_repo_idempotent "$workspace_name" "$repo"; then
-            warn "Failed to add repo $repo to workspace $workspace_name."
-            return 1
+            warn "Failed to add repo $repo to workspace $workspace_name. Try again later."
+            continue
         fi
+
+		local repo_dir="$(config__repo__get_dir "$repo")"
+		local subtree_dir="$workspace_dir/$repo"
+		local branch_name="$workspace_name"
+
+		if ! git__create_workspace_worktree_idempotent "$repo_dir" "$subtree_dir" "$branch_name"; then
+            warn "Failed to add git worktree of $repo to workspace $workspace_name. Maybe it already exists? Try again later."
+            continue
+		fi
 
         echo "Successfully added repo $repo to workspace $workspace_name."
     done
 }
 
 workspace__delete() {
-	debug $LINENO "[workspace__add]" "$*"
+	debug $LINENO "[workspace__delete]" "$*"
+	workspace__validate_all
 	local workspace_name="$1"
 
     if ! config__workspace__delete "$workspace_name"; then
         warn "Failed to delete workspace $workspace_name."
         return 1
     fi
+
+	# TODO: Delete all git worktrees
 }
 
 workspace__list() {
 	debug $LINENO "[workspace__list]" "$*"
+	workspace__validate_all
 	local workspaces=($(config__workspace__list))
 	local cells=()
 
@@ -326,6 +352,8 @@ workspace__list() {
 }
 
 workspace__remove_repo() {
+	debug $LINENO "[workspace__remove_repo]" "$*"
+	workspace__validate_all
     local workspace_name="${1:?"workspace name is required"}"
 	shift
 	# we checked this in cmd__workspace__remove_repo, so guaranteed to have value
@@ -336,120 +364,136 @@ workspace__remove_repo() {
             warn "Failed to remove repo $repo from workspace $workspace_name"
         fi
     done
+
+	# TODO: delete the repo's particular worktree
+}
+
+workspace__validate_all() {
+	debug $LINENO "[workspace__validate_all]" "$*"
+	local workspaces=($(config__workspace__list))
+
+	for workspace in "${workspaces[@]+"${workspaces[@]}"}"; do
+		if [[ -z workspace ]]; then 
+			continue
+		fi
+		workspace__validate "$workspace"
+	done
+
+	# TODO: delete workspaces and worktrees that aren't in the config anymore
+}
+
+workspace__validate() {
+	debug $LINENO "[workspace__validate]" "$*"
+	local workspace="$1"
+	local workspace_dir="$(fs__workspace_mkdir "$workspace")"
+
+	local repos=($(config__workspace__get_repos "$workspace"))
+
+	for repo in "${repos[@]+"${repos[@]}"}"; do
+		if [[ -z "$repo" ]]; then
+			continue
+		fi
+
+		local repo_dir="$(config__repo__get_dir "$repo")"
+		local subtree_dir="$workspace_dir/$repo"
+		local branch_name="$workspace"
+
+		if ! git__create_workspace_worktree_idempotent "$repo_dir" "$subtree_dir" "$branch_name"; then
+			warn "Failed to add git worktree of $repo to workspace $workspace. Maybe it already exists? Try again later."
+			continue
+		fi
+	done
+	
 }
 
 ######################################
 ##### High-Level Repo Management #####
 ######################################
 
-repo__add() {
-	debug $LINENO "[repo__add]" "$*"
-	repo__validate_all
-
-	local repo_url=${1:?}
-	local repo_alias=${2:?}
-	local repo_dir="$REPOS_DIR/$repo_alias"
-
-	# Configs are always the source of truth, so we always add to config first.
-	if ! config__repo__set "$repo_url" "$repo_alias" "$repo_dir"; then
-		warn "Failed to add repository $repo_alias to config."
-		return 1
-	fi
-
-	if ! repo_dir=$(git__add_repo "$repo_url" "$repo_alias"); then
-		config__repo__remove "$repo_alias"
-		warn "Failed to add repository $repo_alias. Parameters: $repo_url, $repo_alias"
-		return 1
-	fi
-
-	echo "Repository $repo_alias added successfully."
-}
-
-repo__remove() {
-	debug $LINENO "[repo__remove]" "$*"
-	repo__validate_all
-
-	local repo_alias=${1:?}
-	local repo_dir="$REPOS_DIR/$repo_alias"
-
-	# Configs are always the source of truth, so we always remove from config first.
-	if ! rm -rf "$repo_dir"; then
-		warn "Failed to remove repository $repo_alias."
-	fi
-
-	if ! [[ -d "$repo_dir" ]]; then
-		warn "Repository $repo_alias does not exist."
-	fi
-
-	if ! config__repo__remove "$repo_alias"; then
-		warn "Failed to remove repository $repo_alias from config."
-	fi
-
-	echo "Repository $repo_alias removed successfully."
-}
-
 # Validate all repos.
 repo__validate_all() {
 	debug $LINENO "[repo__validate_all]" "$*"
 	config__create_file_if_not_exist
 
-	# 1. Validate repo config
-	config__repo__list | while read -r repo_alias; do
-        # Funny bash business AGAIN for arrays
-        if [[ -z $repo_alias ]]; then
+	local repos=($(config__repo__list))
+	for repo_name in "${repos[@]+"${repos[@]}"}"; do
+        # Funny bash business for empty arrays
+        if [[ -z $repo_name ]]; then
             continue
         fi
 
-		local repo_dir=$(config__repo__get_dir "$repo_alias")
-		# 1. if no repo dir, remove from config
-		if [[ -z "$repo_dir" ]]; then
-			warn "Repository $repo_alias does not exist. Removing from config."
-			config__repo__remove "$repo_alias"
-		fi
-
-		# 2. if no origin url, try to get from repo dir
-		local repo_originurl=$(config__repo__get_originurl "$repo_alias")
-		if [[ -z "$repo_originurl" ]]; then
-			local origin_url
-			if ! origin_url=$(git__get_origin "$repo_dir"); then
-				warn "Failed to get origin URL for repository $repo_alias. Removing from config."
-				config__repo__remove "$repo_alias"
-				continue
-			fi
-
-			if ! config__repo__set "$origin_url" "$repo_alias" "$repo_dir"; then
-				warn "Failed to set origin URL for repository $repo_alias. Removing from config."
-				config__repo__remove "$repo_alias"
-				continue
-			fi
-		fi
+		repo__validate__restore_from_config "$repo_name"
 	done
-
-	# 2. Validate filesystem (remove all that do not match repo)
-	find "$REPOS_DIR" -mindepth 1 -maxdepth 1 -type d | while read -r fs_dir; do
-		local found=0
-		local repo_alias_list=($(config__repo__list))
-		for repo_alias in "${repo_alias_list[@]}"; do
-			local config_dir=$(config__repo__get_dir "$repo_alias")
-			if [[ "$config_dir" == "$fs_dir" ]]; then # also: != → ==
-				found=1
-				break
-			fi
-		done
-
-		if [[ "$found" -eq 0 ]]; then
-			warn "Repository $fs_dir does not exist in config. Removing."
-			rm -rf "$fs_dir"
-			continue
-		fi
-
-		# update config
-		if ! config__repo__set "$(git__get_origin "$fs_dir")" "$repo_alias" "$fs_dir"; then
-			warn "Failed to update config for repository $repo_alias. Parameters: $(git__get_origin "$fs_dir"), $repo_alias, $fs_dir"
-		fi
-	done
-
 }
+
+repo__validate__restore_from_config() {
+	debug $LINENO "[repo__validate__restore_from_config]" "$*"
+	local repo_name="$1"
+	local repo_dir=$(config__repo__get_dir "$repo_name")
+	local repo_originurl=$(config__repo__get_originurl "$repo_name")
+
+	# 1. Try to reconstruct variables
+	if [[ -z "$repo_dir" ]]; then
+		repo_dir=${repo_dir:-"$REPOS_DIR/$repo_name"}
+	fi
+	if [[ -z "$repo_originurl" && -d "$repo_dir" ]]; then
+		repo_originurl="$(git__get_origin "$repo_dir")"
+	fi
+
+	# 2. If origin url is no more, cannot be restored
+	if [[ -z "$repo_originurl" ]]; then
+		repo__remove "$repo_name"
+	fi
+
+	# 3. We add the repo back
+	repo__add "$repo_originurl" "$repo_name" "$repo_dir" || true
+}
+
+repo__add() {
+	debug $LINENO "[repo__add]" "$*"
+
+	local repo_url=${1:?}
+	local repo_name=${2:?}
+	local repo_dir="$REPOS_DIR/$repo_name"
+
+	# Configs are always the source of truth, so we always add to config first.
+	if ! config__repo__set "$repo_url" "$repo_name" "$repo_dir"; then
+		warn "Failed to add repository $repo_name to config."
+		return 1
+	fi
+
+	if ! repo_dir=$(git__add_repo_idempotent "$repo_url" "$repo_name"); then
+		config__repo__remove "$repo_name"
+		warn "Failed to add repository $repo_name. Parameters: $repo_url, $repo_name"
+		return 1
+	fi
+
+	echo "Repository $repo_name added successfully."
+}
+
+repo__remove() {
+	debug $LINENO "[repo__remove]" "$*"
+
+	local repo_name=${1:?}
+	local repo_dir="$REPOS_DIR/$repo_name"
+
+	# Configs are always the source of truth, so we always remove from config first.
+	if ! rm -rf "$repo_dir"; then
+		warn "Failed to remove repository $repo_name."
+	fi
+
+	if ! [[ -d "$repo_dir" ]]; then
+		warn "Repository $repo_name does not exist."
+	fi
+
+	if ! config__repo__remove "$repo_name"; then
+		warn "Failed to remove repository $repo_name from config."
+	fi
+
+	echo "Repository $repo_name removed successfully."
+}
+
+
 
 ###############################
 ##### Yaml Configurations #####
@@ -462,7 +506,7 @@ CONFIG_FILE_PATH="$PROJ_DIR/config.yaml"
 #############################
 
 config__workspace__create_idempotent() {
-	debug $LINENO "[config__workspace__add]" "$*"
+	debug $LINENO "[config__workspace__remove_repo_idempotent]" "$*"
 	config__create_file_if_not_exist
 
 	local workspace_name="$1"
@@ -529,7 +573,7 @@ config__workspace__exists() {
 }
 
 config__workspace__has_repo() {
-	debug $LINENO "[config__workspace__exists]" "$*"
+	debug $LINENO "[config__workspace__has_repo]" "$*"
 	config__create_file_if_not_exist
 
 	local workspace_name="$1"
@@ -583,19 +627,19 @@ config__repo__set() {
 	config__create_file_if_not_exist
 
 	local repo_url=${1:?}
-	local repo_alias=${2:?}
+	local repo_name=${2:?}
 	local repo_dir=${3:?}
 
-	# yq eval ".repos += [{name: \"$repo_alias\", url: \"$repo_url\"}]" -i "$config_path"
-	yq -i ".repos.${repo_alias} = {\"origin_url\": \"$repo_url\", \"dir\": \"$repo_dir\"}" "$CONFIG_FILE_PATH"
+	# yq eval ".repos += [{name: \"$repo_name\", url: \"$repo_url\"}]" -i "$config_path"
+	yq -i ".repos.${repo_name} = {\"origin_url\": \"$repo_url\", \"dir\": \"$repo_dir\"}" "$CONFIG_FILE_PATH"
 }
 
 config__repo__remove() {
 	debug $LINENO "[config__repo__remove]" "$*"
 	config__create_file_if_not_exist
-	local repo_alias=${1:?}
+	local repo_name=${1:?}
 
-	yq -i "del(.repos.${repo_alias})" "$CONFIG_FILE_PATH"
+	yq -i "del(.repos.${repo_name})" "$CONFIG_FILE_PATH"
 }
 
 config__repo__list() {
@@ -615,11 +659,10 @@ config__repo__list() {
 config__repo__get_dir() {
 	debug $LINENO "[config__repo__get_dir]" "$*"
 	config__create_file_if_not_exist
-    debug_stack_trace
-	local repo_alias=${1:?}
+	local repo_name="${1:?}"
 
 	local config_path="$CONFIG_FILE_PATH"
-	local return=$(yq -r ".repos.${repo_alias}.dir" "$config_path")
+	local return=$(yq -r ".repos.${repo_name}.dir" "$config_path")
 	if [[ "$return" == "null" ]]; then
 		echo ""
 	else
@@ -630,9 +673,9 @@ config__repo__get_dir() {
 config__repo__get_originurl() {
 	debug $LINENO "[config__repo__get_originurl]" "$*"
 	config__create_file_if_not_exist
-	local repo_alias=${1:?}
+	local repo_name=${1:?}
 
-	local return=$(yq -r ".repos.${repo_alias}.origin_url" "$CONFIG_FILE_PATH")
+	local return=$(yq -r ".repos.${repo_name}.origin_url" "$CONFIG_FILE_PATH")
 	if [[ "$return" == "null" ]]; then
 		echo ""
 	else
@@ -651,28 +694,50 @@ config__create_file_if_not_exist() {
 ##### Git Facades #####
 #######################
 
-git__add_repo() {
-	debug $LINENO "[git__add_repo]" "$*"
+git__add_repo_idempotent() {
+	debug $LINENO "[git__add_repo_idempotent]" "$*"
 	local repo_url=${1:?}
-	local repo_alias=${2:?}
+	local repo_name=${2:?}
+	local repo_dir="$(const__get_repo_dir "$repo_name")"
 
-	local repo_dir="$REPOS_DIR/$repo_alias"
-	if [ -d "$repo_dir" ]; then
-		warn "Repository $repo_alias already exists. Please choose a different alias."
-		return 1
-	fi
-
-	if ! git clone "$repo_url" "$repo_dir"; then
-		warn "Failed to clone repository $repo_alias."
-		return 1
+	if ! git__validate_repo "$repo_url" "$repo_name"; then
+		warn "Pre-clone check: there is an issue with the repo. Clearing and re-cloning..."
+		rm -rf "$repo_dir"
+		if ! git clone "$repo_url" "$repo_dir"; then
+			warn "Failed to clone repository $repo_name."
+			return 1
+		fi
 	fi
 
 	realpath "$repo_dir"
 }
 
+# return 1 = no repo, or repo is wrong
+# return 2 = yes repo
+# Checked by origin.
+git__validate_repo() {
+	debug $LINENO "[git__validate_repo]" "$*"
+	local repo_url=${1:?}
+	local repo_name=${2:?}
+	local repo_dir="$(const__get_repo_dir "$repo_name")"
+
+	if [[ ! -d "$repo_dir" ]]; then
+		warn "Git::Validate Repo. Failed validation (repo does not exist, expected "$repo_dir")"
+		return 1
+	fi
+
+	if [[ "$(git__get_origin "$repo_name")" != "$repo_url" ]]; then
+		warn "Git::Validate Repo. Failed validation (expected origin "$repo_url", got $(git__get_origin "$repo_name"))"
+		return 1
+	fi
+
+	return 0
+}
+
 git__get_origin() {
 	debug $LINENO "[git__get_origin]" "$*"
-	local repo_dir=${1:?}
+	local repo_name=${1:?}
+	local repo_dir="$(const__get_repo_dir "$repo_name")"
 
 	git -C "$repo_dir" remote get-url origin
 }
@@ -687,6 +752,52 @@ git__get_repo_name() {
 	fi
 
 	basename "$repo_url" .git
+}
+
+git__create_workspace_worktree_idempotent() {
+	debug $LINENO "[git__create_workspace_worktree_idempotent]" "$*"
+	local source_repo_dir="$1"
+	local destination_worktree_dir="$2"
+	local branch_name="$3"
+
+	if git__check_worktree_exists "$source_repo_dir" "$destination_worktree_dir"; then
+		debug $LINENO "[git__create_workspace_worktree_idempotent]" "Git worktree already exists" "$source_repo_dir" to "$destination_worktree_dir"
+		return 0;
+	fi
+
+	git -C "$source_repo_dir" worktree add -b "$branch_name" "$destination_worktree_dir"
+}
+
+git__check_worktree_exists() {
+	debug $LINENO "[git__check_worktree_exists]" "$*"
+	local source_repo_dir="$1"
+	local destination_worktree_dir="$2"
+
+	if [[ -z "$(git -C "$source_repo_dir" worktree list --porcelain | grep -e "^worktree " | cut -f 2 -d ' ' | grep -Fx "$destination_worktree_dir" )" ]]; then
+		return 1
+	else
+		return 0
+	fi
+}
+
+
+######################
+##### Filesystem #####
+######################
+
+# Create workspace dir and return the path
+fs__workspace_mkdir() {
+	local workspace_name="$1"
+	if [[ -z "$workspace_name" ]]; then
+		fatal "Workspace name is empty"
+		return 1
+	fi
+
+	local workspace_dir="$WORKSPACES_DIR/$workspace_name"
+
+	mkdir -p "$workspace_dir" &> /dev/null
+	
+	echo "$workspace_dir"
 }
 
 #############################
@@ -729,6 +840,12 @@ dependency__assert_yq() {
 #################
 ##### Utils #####
 #################
+
+
+const__get_repo_dir() {
+	local repo_name="$1"
+	echo "$REPOS_DIR/$repo_name"
+}
 
 env_is_macos() {
 	debug $LINENO "[env_is_macos]" "$*"
