@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACM)
+echo "$STAGED" | xargs shfmt -w
+echo "$STAGED" | xargs git add
