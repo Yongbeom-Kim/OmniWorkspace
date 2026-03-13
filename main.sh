@@ -151,6 +151,10 @@ cmd__workspace() {
 		shift
 		cmd__workspace__add "$@"
 		;;
+	"delete")
+		shift
+		cmd__workspace__delete "$@"
+		;;
 	*)
 		echo "Unknown sub-command: ${1:-}. Available sub-commands: add, remove, list"
 		exit 1
@@ -158,6 +162,7 @@ cmd__workspace() {
 	esac
 }
 
+# Functions as both "create workspace" and "add repo to workspace"
 cmd__workspace__add() {
 	local workspace_name="${1:?"workspace name is required"}"
 	shift
@@ -166,13 +171,19 @@ cmd__workspace__add() {
 	workspace__add $workspace_name "${workspace_repos[@]}"
 }
 
+cmd__workspace__delete() {
+	local workspace_name="${1:?"workspace name is required"}"
+    
+    workspace__delete $workspace_name
+}
+
 cmd__workspace__list() {
     workspace__list
 }
-# remove
-# info
-# add_repo
-# remove_repo
+
+cmd__workspace__remove_repo() {
+    echo "remove repo"
+}
 
 ####################
 ### Repositories ###
@@ -263,7 +274,16 @@ workspace__add() {
 
         echo "Successfully added repo $repo to workspace $workspace_name."
     done
+}
 
+workspace__delete() {
+	debug $LINENO "[workspace__add]" "$*"
+	local workspace_name="$1"
+
+    if ! config__workspace__delete "$workspace_name"; then
+        warn "Failed to delete workspace $workspace_name."
+        return 1
+    fi
 }
 
 workspace__list() {
@@ -416,6 +436,7 @@ config__workspace__create_idempotent() {
 
     if config__workspace__exists "$workspace_name"; then
         warn "Creating workspace $workspace_name: already exists"
+        # Idempotent, so OK to return 0
         return 0
     fi
 
@@ -423,7 +444,20 @@ config__workspace__create_idempotent() {
     if [ $? -ne 0 ]; then
         echo "Failed to create new workspace ${workspace_name}"
     fi
+}
 
+config__workspace__delete() {
+	debug $LINENO "[config__workspace__delete]" "$*"
+	config__create_file_if_not_exist
+
+	local workspace_name="$1"
+
+    if ! config__workspace__exists "$workspace_name"; then
+        warn "Deleting workspace $workspace_name: does not exist"
+        return 1
+    fi
+
+    yq -i "del(.workspaces.${workspace_name})" "$CONFIG_FILE_PATH"
 }
 
 config__workspace__add_repo_idempotent() {
