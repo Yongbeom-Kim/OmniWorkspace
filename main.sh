@@ -616,6 +616,36 @@ env_is_macos() {
 	[[ "$(uname)" == "Darwin" ]]
 }
 
+print_table_vertically() {
+	debug $LINENO "[print_table_vertically]" "$*"
+	local n_cols=${1:?}
+	shift
+
+	local n_cells="$#"
+	local cells=("$@")
+
+	local n_rows=$(( n_cells / n_cols ))
+	local leftover_cells=$(( n_cells % n_rows ))
+
+	if [[ $leftover_cells -ne 0 ]]; then
+		warn "Table has leftover cells: $leftover_cells"
+		return 1
+	fi
+
+	# We can just transpose and print horizontally
+	local transposed_cells=()
+
+	for ((r=0; r < $n_rows; r++)); do
+		for ((c=0; c < $n_cols; c++)); do
+			local cell_idx=$(( c * n_rows + r ))
+			transposed_cells+=("${cells[$cell_idx]}")
+		done
+	done
+
+	print_table_horizontally $n_cols "${transposed_cells[@]+"${transposed_cells[@]}"}"
+
+}
+
 print_table_horizontally() {
 	debug $LINENO "[print_table_horizontally]" "$*"
 	local n_cols=${1:?}
@@ -656,36 +686,6 @@ print_table_horizontally() {
 		fi
 	done
 	printf "\n"
-}
-
-print_table_vertically() {
-	debug $LINENO "[print_table_vertically]" "$*"
-	local n_cols=${1:?}
-	shift
-
-	local n_cells="$#"
-	local cells=("$@")
-
-	local n_rows=$(( n_cells / n_cols ))
-	local leftover_cells=$(( n_cells % n_rows ))
-
-	if [[ $leftover_cells -ne 0 ]]; then
-		warn "Table has leftover cells: $leftover_cells"
-		return 1
-	fi
-
-	# We can just transpose and print horizontally
-	local transposed_cells=()
-
-	for ((r=0; r < $n_rows; r++)); do
-		for ((c=0; c < $n_cols; c++)); do
-			local cell_idx=$(( c * n_rows + r ))
-			transposed_cells+=("${cells[$cell_idx]}")
-		done
-	done
-
-	print_table_horizontally $n_cols "${transposed_cells[@]+"${transposed_cells[@]}"}"
-
 }
 
 main "$@"
