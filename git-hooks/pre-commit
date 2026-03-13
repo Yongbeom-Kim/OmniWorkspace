@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
 STAGED=$(git diff --cached --name-only --diff-filter=ACM)
-echo "$STAGED" | xargs shfmt -w
+
+STAGED_SH=$(echo STAGED) | grep -v Makefile # shfmt removes makefile indents for some reason.
+
+echo "$STAGED_SH" | xargs shfmt -w
 echo "$STAGED" | xargs git add
