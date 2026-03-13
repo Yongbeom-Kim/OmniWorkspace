@@ -481,6 +481,7 @@ env_is_macos() {
 }
 
 print_table() {
+	debug $LINENO "[print_table]" "$*"
 	local n_cols=${1:?}
 	shift
 	local cells=("$@")
