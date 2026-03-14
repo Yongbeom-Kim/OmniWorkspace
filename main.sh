@@ -3,77 +3,154 @@ set -euo pipefail
 
 ## Control Sequences ##
 
-RESET='\033[0m'
-BOLD='\033[1m'
-DIM='\033[2m'
-ITALIC='\033[3m'
-UNDERLINE='\033[4m'
-BLINK='\033[5m'
-BLINK_FAST='\033[6m'
-REVERSE='\033[7m'
-HIDDEN='\033[8m'
-STRIKETHROUGH='\033[9m'
+if [[ -t 1 ]] && [[ -z "${NO_COLOR:-}" ]]; then
+    RESET='\033[0m'
+    BOLD='\033[1m'
+    DIM='\033[2m'
+    ITALIC='\033[3m'
+    UNDERLINE='\033[4m'
+    BLINK='\033[5m'
+    BLINK_FAST='\033[6m'
+    REVERSE='\033[7m'
+    HIDDEN='\033[8m'
+    STRIKETHROUGH='\033[9m'
 
-BLACK='\033[30m'
-RED='\033[31m'
-GREEN='\033[32m'
-YELLOW='\033[33m'
-BLUE='\033[34m'
-MAGENTA='\033[35m'
-CYAN='\033[36m'
-WHITE='\033[37m'
-DEFAULT='\033[39m'
+    BLACK='\033[30m'
+    RED='\033[31m'
+    GREEN='\033[32m'
+    YELLOW='\033[33m'
+    BLUE='\033[34m'
+    MAGENTA='\033[35m'
+    CYAN='\033[36m'
+    WHITE='\033[37m'
+    DEFAULT='\033[39m'
 
-BRIGHT_BLACK='\033[90m' # (Dark Gray)
-BRIGHT_RED='\033[91m'
-BRIGHT_GREEN='\033[92m'
-BRIGHT_YELLOW='\033[93m'
-BRIGHT_BLUE='\033[94m'
-BRIGHT_MAGENTA='\033[95m'
-BRIGHT_CYAN='\033[96m'
-BRIGHT_WHITE='\033[97m'
+    BRIGHT_BLACK='\033[90m' # (Dark Gray)
+    BRIGHT_RED='\033[91m'
+    BRIGHT_GREEN='\033[92m'
+    BRIGHT_YELLOW='\033[93m'
+    BRIGHT_BLUE='\033[94m'
+    BRIGHT_MAGENTA='\033[95m'
+    BRIGHT_CYAN='\033[96m'
+    BRIGHT_WHITE='\033[97m'
 
-BG_BLACK='\033[40m'
-BG_RED='\033[41m'
-BG_GREEN='\033[42m'
-BG_YELLOW='\033[43m'
-BG_BLUE='\033[44m'
-BG_MAGENTA='\033[45m'
-BG_CYAN='\033[46m'
-BG_WHITE='\033[47m'
-BG_DEFAULT='\033[49m'
+    BG_BLACK='\033[40m'
+    BG_RED='\033[41m'
+    BG_GREEN='\033[42m'
+    BG_YELLOW='\033[43m'
+    BG_BLUE='\033[44m'
+    BG_MAGENTA='\033[45m'
+    BG_CYAN='\033[46m'
+    BG_WHITE='\033[47m'
+    BG_DEFAULT='\033[49m'
 
-BG_BRIGHT_BLACK='\033[100m'
-BG_BRIGHT_RED='\033[101m'
-BG_BRIGHT_GREEN='\033[102m'
-BG_BRIGHT_YELLOW='\033[103m'
-BG_BRIGHT_BLUE='\033[104m'
-BG_BRIGHT_MAGENTA='\033[105m'
-BG_BRIGHT_CYAN='\033[106m'
-BG_BRIGHT_WHITE='\033[107m'
+    BG_BRIGHT_BLACK='\033[100m'
+    BG_BRIGHT_RED='\033[101m'
+    BG_BRIGHT_GREEN='\033[102m'
+    BG_BRIGHT_YELLOW='\033[103m'
+    BG_BRIGHT_BLUE='\033[104m'
+    BG_BRIGHT_MAGENTA='\033[105m'
+    BG_BRIGHT_CYAN='\033[106m'
+    BG_BRIGHT_WHITE='\033[107m'
 
-CURSOR_UP='\033[1A'
-CURSOR_DOWN='\033[1B'
-CURSOR_RIGHT='\033[1C'
-CURSOR_LEFT='\033[1D'
-CURSOR_HOME='\033[H'    # Move to top-left
-CURSOR_SAVE='\033[s'    # Save cursor position
-CURSOR_RESTORE='\033[u' # Restore cursor position
-CURSOR_HIDE='\033[?25l'
-CURSOR_SHOW='\033[?25h'
+    CURSOR_UP='\033[1A'
+    CURSOR_DOWN='\033[1B'
+    CURSOR_RIGHT='\033[1C'
+    CURSOR_LEFT='\033[1D'
+    CURSOR_HOME='\033[H'    # Move to top-left
+    CURSOR_SAVE='\033[s'    # Save cursor position
+    CURSOR_RESTORE='\033[u' # Restore cursor position
+    CURSOR_HIDE='\033[?25l'
+    CURSOR_SHOW='\033[?25h'
 
-ERASE_LINE='\033[2K'         # Erase entire current line
-ERASE_LINE_END='\033[K'      # Erase from cursor to end of line
-ERASE_LINE_START='\033[1K'   # Erase from cursor to start of line
-ERASE_SCREEN='\033[2J'       # Erase entire screen
-ERASE_SCREEN_END='\033[0J'   # Erase from cursor to end of screen
-ERASE_SCREEN_START='\033[1J' # Erase from cursor to start of screen
+    ERASE_LINE='\033[2K'         # Erase entire current line
+    ERASE_LINE_END='\033[K'      # Erase from cursor to end of line
+    ERASE_LINE_START='\033[1K'   # Erase from cursor to start of line
+    ERASE_SCREEN='\033[2J'       # Erase entire screen
+    ERASE_SCREEN_END='\033[0J'   # Erase from cursor to end of screen
+    ERASE_SCREEN_START='\033[1J' # Erase from cursor to start of screen
+else
+    RESET=''
+    BOLD=''
+    DIM=''
+    ITALIC=''
+    UNDERLINE=''
+    BLINK=''
+    BLINK_FAST=''
+    REVERSE=''
+    HIDDEN=''
+    STRIKETHROUGH=''
+
+    BLACK=''
+    RED=''
+    GREEN=''
+    YELLOW=''
+    BLUE=''
+    MAGENTA=''
+    CYAN=''
+    WHITE=''
+    DEFAULT=''
+
+    BRIGHT_BLACK=''
+    BRIGHT_RED=''
+    BRIGHT_GREEN=''
+    BRIGHT_YELLOW=''
+    BRIGHT_BLUE=''
+    BRIGHT_MAGENTA=''
+    BRIGHT_CYAN=''
+    BRIGHT_WHITE=''
+
+    BG_BLACK=''
+    BG_RED=''
+    BG_GREEN=''
+    BG_YELLOW=''
+    BG_BLUE=''
+    BG_MAGENTA=''
+    BG_CYAN=''
+    BG_WHITE=''
+    BG_DEFAULT=''
+
+    BG_BRIGHT_BLACK=''
+    BG_BRIGHT_RED=''
+    BG_BRIGHT_GREEN=''
+    BG_BRIGHT_YELLOW=''
+    BG_BRIGHT_BLUE=''
+    BG_BRIGHT_MAGENTA=''
+    BG_BRIGHT_CYAN=''
+    BG_BRIGHT_WHITE=''
+
+    CURSOR_UP=''
+    CURSOR_DOWN=''
+    CURSOR_RIGHT=''
+    CURSOR_LEFT=''
+    CURSOR_HOME=''
+    CURSOR_SAVE=''
+    CURSOR_RESTORE=''
+    CURSOR_HIDE=''
+    CURSOR_SHOW=''
+
+    ERASE_LINE=''
+    ERASE_LINE_END=''
+    ERASE_LINE_START=''
+    ERASE_SCREEN=''
+    ERASE_SCREEN_END=''
+    ERASE_SCREEN_START=''
+fi
 
 ## Project Variables ##
 
 PROJ_DIR="${PROJ_DIR:-$HOME/.ows}"
 REPOS_DIR="${REPOS_DIR:-$PROJ_DIR/repos}"
 WORKSPACES_DIR="${WORKSPACES_DIR:-$PROJ_DIR/workspaces}"
+
+# Validate that critical directories are absolute paths under $HOME
+for _dir_var in PROJ_DIR REPOS_DIR WORKSPACES_DIR; do
+	if [[ "${!_dir_var}" != "$HOME"/* ]]; then
+		echo "[FATAL] $_dir_var must be under \$HOME ($HOME), got '${!_dir_var}'" >&2
+		exit 1
+	fi
+done
+unset _dir_var
 
 trap 'echo "Error on line $LINENO in ${FUNCNAME[0]:-main}" >&2; debug_stack_trace' ERR
 
@@ -109,22 +186,27 @@ debug_stack_trace() {
 		return 0
 	fi
 
-	echo "Stack trace:"
+	echo "Stack trace:" >&2
 	local i
 	for i in "${!FUNCNAME[@]}"; do
 		# skip stack_trace itself
 		[[ $i -eq 0 ]] && continue
-		echo "  [$i] ${FUNCNAME[$i]}() ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}"
+		echo "  [$i] ${FUNCNAME[$i]}() ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}" >&2
 	done
 }
 
 main() {
-	debug $LINENO "[main]" "$*"
+	debug "$LINENO" "[main]" "$*"
 	dependency__assert_git
-	dependency__assert_docker
 	dependency__assert_yq
 
 	local cmd="${1:-}"
+
+	if [[ -z "$cmd" ]]; then
+		echo "Usage: ows <command> [args]"
+		echo "Commands: workspace (ws), workspaces (wss), repo (r), repos (rs)"
+		exit 1
+	fi
 
 	case "$cmd" in
 	"workspaces" | "wss")
@@ -159,7 +241,7 @@ main() {
 ####################
 
 cmd__workspace() {
-	debug $LINENO "[cmd__repo]" "$*"
+	debug "$LINENO" "[cmd__workspace]" "$*"
 
 	case ${1:-} in
 	"add" | "add-repo")
@@ -183,7 +265,7 @@ cmd__workspace() {
 		cmd__workspace__exec "$@"
 		;;
 	*)
-		echo "Unknown sub-command: ${1:-}. Available sub-commands: add, remove, list, exec"
+		echo "Unknown sub-command: ${1:-}. Available sub-commands: add, add-repo, remove-repo, delete, list, exec"
 		exit 1
 		;;
 	esac
@@ -198,10 +280,11 @@ cmd__workspace__add() {
 	fi
 
 	local workspace_name="${1:?"workspace name is required"}"
+	validate_name "$workspace_name" "workspace name"
 	shift
 	local workspace_repos=("$@")
 
-	workspace__add $workspace_name "${workspace_repos[@]}"
+	workspace__add "$workspace_name" "${workspace_repos[@]}"
 }
 
 cmd__workspace__delete() {
@@ -212,7 +295,8 @@ cmd__workspace__delete() {
 	fi
 
 	local workspace_name="${1:?"workspace name is required"}"
-    workspace__delete "$workspace_name"
+	validate_name "$workspace_name" "workspace name"
+	workspace__delete "$workspace_name"
 }
 
 cmd__workspace__list() {
@@ -227,6 +311,7 @@ cmd__workspace__remove_repo() {
 	fi
 
     local workspace_name="${1:?"workspace name is required"}"
+	validate_name "$workspace_name" "workspace name"
 	shift
 	local repos_to_remove=("$@")
 
@@ -234,7 +319,7 @@ cmd__workspace__remove_repo() {
         warn "No repos to remove from workspace $workspace_name"
         return 0
     fi
-    
+
     workspace__remove_repos "$workspace_name" "${repos_to_remove[@]}"
 }
 
@@ -246,6 +331,7 @@ cmd__workspace__exec() {
 	fi
 
     local workspace_name="${1:?"workspace name is required"}"
+	validate_name "$workspace_name" "workspace name"
 	shift
 	local args=("$@")
 
@@ -257,7 +343,7 @@ cmd__workspace__exec() {
 ####################
 
 cmd__repo() {
-	debug $LINENO "[cmd__repo]" "$*"
+	debug "$LINENO" "[cmd__repo]" "$*"
 	repo__validate_all
 	case ${1:-} in
 	"add")
@@ -280,7 +366,7 @@ cmd__repo() {
 }
 
 cmd__repo__add() {
-	debug $LINENO "[cmd__repo__add]" "$*"
+	debug "$LINENO" "[cmd__repo__add]" "$*"
 	local repo_url=$1
 	local repo_name=${2:-}
 
@@ -290,19 +376,21 @@ cmd__repo__add() {
 	fi
 
 	local repo_name=${repo_name:-$repo_name_from_url}
+	validate_name "$repo_name" "repo name"
 
 	repo__add "$repo_url" "$repo_name"
 }
 
 cmd__repo__remove() {
-	debug $LINENO "[cmd__repo__remove]" "$*"
+	debug "$LINENO" "[cmd__repo__remove]" "$*"
 	local repo_name=$1
+	validate_name "$repo_name" "repo name"
 
 	repo__remove "$repo_name"
 }
 
 cmd__repo__list() {
-	debug $LINENO "[cmd__repo__list]" "$*"
+	debug "$LINENO" "[cmd__repo__list]" "$*"
 	repo__validate_all
 	local repos=($(config__repo__list))
 	local cells=()
@@ -322,7 +410,7 @@ cmd__repo__list() {
 ###########################################
 
 workspace__add() {
-	debug $LINENO "[workspace__add]" "$*"
+	debug "$LINENO" "[workspace__add]" "$*"
 	workspace__validate_all
 	repo__validate_all
 
@@ -335,7 +423,8 @@ workspace__add() {
         return 1
     fi
 	
-	local workspace_dir=$(fs__workspace_mkdir "$workspace_name")
+	local workspace_dir="$(fs__workspace_get_dir "$workspace_name")"
+    fs__workspace_mkdir_idempotent "$workspace_name"
 
     for repo in "${workspace_repos[@]+"${workspace_repos[@]}"}"; do
         if [[ -z $repo ]]; then
@@ -360,29 +449,29 @@ workspace__add() {
 }
 
 workspace__delete() {
-	debug $LINENO "[workspace__delete]" "$*"
+	debug "$LINENO" "[workspace__delete]" "$*"
 	workspace__validate_all
 	local workspace_name="$1"
 
 	local repos=($(config__workspace__get_repos "$workspace_name"))
 	workspace__remove_repos "$workspace_name" "${repos[@]+"${repos[@]}"}"
 
-	rm -rf "$(fs__workspace_get_dir "$workspace_name")"
-    
-    if ! config__workspace__delete_idempotent "$workspace_name"; then
-        warn "Failed to delete workspace $workspace_name."
-        return 1
-    fi
+	if ! config__workspace__delete_idempotent "$workspace_name"; then
+		warn "Failed to delete workspace $workspace_name."
+		return 1
+	fi
+
+	fs__safe_rm_rf "$(fs__workspace_get_dir "$workspace_name")" "$WORKSPACES_DIR"
 }
 
 workspace__list() {
-	debug $LINENO "[workspace__list]" "$*"
+	debug "$LINENO" "[workspace__list]" "$*"
 	workspace__validate_all
 	local workspaces=($(config__workspace__list))
 	local cells=()
 
 	for workspace in "${workspaces[@]+"${workspaces[@]}"}"; do
-		if [[ -z "$workspace" ]]; then 
+		if [[ -z "$workspace" ]]; then
 			continue
 		fi
 		local repos=($(config__workspace__get_repos "$workspace"))
@@ -400,7 +489,7 @@ workspace__list() {
 }
 
 workspace__remove_repos() {
-	debug $LINENO "[workspace__remove_repos]" "$*"
+	debug "$LINENO" "[workspace__remove_repos]" "$*"
 	workspace__validate_all
     local workspace_name="${1:?"workspace name is required"}"
 	shift
@@ -419,7 +508,7 @@ workspace__remove_repos() {
 }
 
 workspace__exec() {
-	debug $LINENO "[workspace__exec]" "$*"
+	debug "$LINENO" "[workspace__exec]" "$*"
 	workspace__validate_all
 
     local workspace_name="${1:?"workspace name is required"}"
@@ -440,11 +529,12 @@ workspace__exec() {
 }
 
 workspace__validate_all() {
-	debug $LINENO "[workspace__validate_all]" "$*"
+	debug "$LINENO" "[workspace__validate_all]" "$*"
 	local workspaces=($(config__workspace__list))
 
+
 	for workspace in "${workspaces[@]+"${workspaces[@]}"}"; do
-		if [[ -z workspace ]]; then 
+		if [[ -z "$workspace" ]]; then
 			continue
 		fi
 		workspace__validate "$workspace"
@@ -454,12 +544,12 @@ workspace__validate_all() {
 }
 
 workspace__validate() {
-	debug $LINENO "[workspace__validate]" "$*"
+	debug "$LINENO" "[workspace__validate]" "$*"
 	local workspace_name="$1"
 	local workspace_dir="$(fs__workspace_get_dir "$workspace_name")"
-	local repos=($(config__workspace__get_repos "$workspace"))
-    
-    fs__workspace_mkdir_idempotent "$workspace"
+	local repos=($(config__workspace__get_repos "$workspace_name"))
+
+	fs__workspace_mkdir_idempotent "$workspace_name"
 
 	for repo in "${repos[@]+"${repos[@]}"}"; do
 		if [[ -z "$repo" ]]; then
@@ -468,10 +558,10 @@ workspace__validate() {
 
 		local repo_dir="$(config__repo__get_dir "$repo")"
 		local subtree_dir=$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo")
-		local branch_name="$workspace"
+		local branch_name="$workspace_name"
 
 		if ! git__create_workspace_worktree_idempotent "$repo_dir" "$subtree_dir" "$branch_name"; then
-			warn "Failed to add git worktree of $repo to workspace $workspace. Maybe it already exists? Try again later."
+			warn "Failed to add git worktree of $repo to workspace $workspace_name. Maybe it already exists? Try again later."
 			continue
 		fi
 	done
@@ -483,10 +573,12 @@ workspace__validate() {
 
 # Validate all repos.
 repo__validate_all() {
-	debug $LINENO "[repo__validate_all]" "$*"
+	debug "$LINENO" "[repo__validate_all]" "$*"
 	config__create_file_if_not_exist
 
-	local repos=($(config__repo__list))
+	local repos
+    repos=($(config__repo__list))
+    
 	for repo_name in "${repos[@]+"${repos[@]}"}"; do
         # Funny bash business for empty arrays
         if [[ -z $repo_name ]]; then
@@ -498,14 +590,14 @@ repo__validate_all() {
 }
 
 repo__validate__restore_from_config() {
-	debug $LINENO "[repo__validate__restore_from_config]" "$*"
+	debug "$LINENO" "[repo__validate__restore_from_config]" "$*"
 	local repo_name="$1"
 	local repo_dir=$(config__repo__get_dir "$repo_name")
 	local repo_originurl=$(config__repo__get_originurl "$repo_name")
 
 	# 1. Try to reconstruct variables
 	if [[ -z "$repo_dir" ]]; then
-		repo_dir=${repo_dir:-"$REPOS_DIR/$repo_name"}
+		repo_dir="$REPOS_DIR/$repo_name"
 	fi
 	if [[ -z "$repo_originurl" && -d "$repo_dir" ]]; then
 		repo_originurl="$(git__get_origin "$repo_dir")"
@@ -514,6 +606,7 @@ repo__validate__restore_from_config() {
 	# 2. If origin url is no more, cannot be restored
 	if [[ -z "$repo_originurl" ]]; then
 		repo__remove "$repo_name"
+		return 0
 	fi
 
 	# 3. We add the repo back
@@ -521,7 +614,7 @@ repo__validate__restore_from_config() {
 }
 
 repo__add() {
-	debug $LINENO "[repo__add]" "$*"
+	debug "$LINENO" "[repo__add]" "$*"
 
 	local repo_url=${1:?}
 	local repo_name=${2:?}
@@ -532,7 +625,7 @@ repo__add() {
 	local existing_dir=$(config__repo__get_dir "$repo_name")
 	if [[ "$existing_url" == "$repo_url" && "$existing_dir" == "$repo_dir" ]]; then
 		if git__validate_repo "$repo_url" "$repo_name"; then
-			debug $LINENO "[repo__add]" "Repository $repo_name already exists with same config, skipping"
+			debug "$LINENO" "[repo__add]" "Repository $repo_name already exists with same config, skipping"
 			return 0
 		fi
 	fi
@@ -553,14 +646,14 @@ repo__add() {
 }
 
 repo__remove() {
-	debug $LINENO "[repo__remove]" "$*"
+	debug "$LINENO" "[repo__remove]" "$*"
 
 	local repo_name=${1:?}
 	local repo_dir="$REPOS_DIR/$repo_name"
 
 	# Remove directory if it exists
 	if [[ -d "$repo_dir" ]]; then
-		if ! rm -rf "$repo_dir"; then
+		if ! fs__safe_rm_rf "$repo_dir" "$REPOS_DIR"; then
 			warn "Failed to remove repository directory $repo_name."
 			return 1
 		fi
@@ -585,115 +678,110 @@ CONFIG_FILE_PATH="$PROJ_DIR/config.yaml"
 #############################
 
 config__workspace__create_idempotent() {
-	debug $LINENO "[config__workspace__create_idempotent]" "$*"
+	debug "$LINENO" "[config__workspace__create_idempotent]" "$*"
 	config__create_file_if_not_exist
 
 	local workspace_name="$1"
 
-    if config__workspace__exists "$workspace_name"; then
-        warn "Creating workspace $workspace_name: already exists"
-        # Idempotent, so OK to return 0
-        return 0
-    fi
+	if config__workspace__exists "$workspace_name"; then
+		warn "Creating workspace $workspace_name: already exists"
+		# Idempotent, so OK to return 0
+		return 0
+	fi
 
-    yq -i ".workspaces.${workspace_name}.repos = []" "$CONFIG_FILE_PATH"
-    if [ $? -ne 0 ]; then
-        echo "Failed to create new workspace ${workspace_name}"
-    fi
+	if ! yq -i ".workspaces.[\"${workspace_name}\"].repos = []" "$CONFIG_FILE_PATH"; then
+		warn "Failed to create new workspace ${workspace_name}"
+		return 1
+	fi
 }
 
 config__workspace__delete_idempotent() {
-	debug $LINENO "[config__workspace__delete_idempotent]" "$*"
+	debug "$LINENO" "[config__workspace__delete_idempotent]" "$*"
 	config__create_file_if_not_exist
 
 	local workspace_name="$1"
 
-    if ! config__workspace__exists "$workspace_name"; then
-        warn "Deleting workspace $workspace_name: already absent"
-        return 0
-    fi
+	if ! config__workspace__exists "$workspace_name"; then
+		warn "Deleting workspace $workspace_name: already absent"
+		return 0
+	fi
 
-    yq -i "del(.workspaces.${workspace_name})" "$CONFIG_FILE_PATH"
+	yq -i "del(.workspaces.[\"${workspace_name}\"])" "$CONFIG_FILE_PATH"
 }
 
 config__workspace__add_repo_idempotent() {
-	debug $LINENO "[config__workspace__add]" "$*"
+	debug "$LINENO" "[config__workspace__add_repo_idempotent]" "$*"
 	config__create_file_if_not_exist
 	local workspace_name="$1"
-    local repo_name="$2"
+	local repo_name="$2"
 
-    if config__workspace__has_repo "$workspace_name" "$repo_name"; then
-        warn "Adding repo $repo_name to workspace $workspace_name: already exists"
-        return 0
-    fi
+	if config__workspace__has_repo "$workspace_name" "$repo_name"; then
+		warn "Adding repo $repo_name to workspace $workspace_name: already exists"
+		return 0
+	fi
 
-    yq -i ".workspaces.${workspace_name}.repos += [\"$repo_name\"]" "$CONFIG_FILE_PATH"
+	yq -i ".workspaces.[\"${workspace_name}\"].repos += [\"$repo_name\"]" "$CONFIG_FILE_PATH"
 }
 
 config__workspace__remove_repo_idempotent() {
-	debug $LINENO "[config__workspace__add]" "$*"
+	debug "$LINENO" "[config__workspace__remove_repo_idempotent]" "$*"
 	config__create_file_if_not_exist
 	local workspace_name="$1"
-    local repo_name="$2"
+	local repo_name="$2"
 
-    if ! config__workspace__has_repo "$workspace_name" "$repo_name"; then
-        warn "Removing repo $repo_name from workspace $workspace_name: does not exist"
-        return 0
-    fi
+	if ! config__workspace__has_repo "$workspace_name" "$repo_name"; then
+		warn "Removing repo $repo_name from workspace $workspace_name: does not exist"
+		return 0
+	fi
 
-    yq -i "del(.workspaces.${workspace_name}.repos[] | select(. == \"$repo_name\"))" "$CONFIG_FILE_PATH"
+	yq -i "del(.workspaces.[\"${workspace_name}\"].repos[] | select(. == \"$repo_name\"))" "$CONFIG_FILE_PATH"
 }
 
 config__workspace__exists() {
-	debug $LINENO "[config__workspace__exists]" "$*"
+	debug "$LINENO" "[config__workspace__exists]" "$*"
 	config__create_file_if_not_exist
 	local workspace_name="$1"
-	yq -e ".workspaces.${workspace_name}" "$CONFIG_FILE_PATH" &>/dev/null
+	yq -e ".workspaces.[\"${workspace_name}\"]" "$CONFIG_FILE_PATH" &>/dev/null
 }
 
 config__workspace__has_repo() {
-	debug $LINENO "[config__workspace__has_repo]" "$*"
+	debug "$LINENO" "[config__workspace__has_repo]" "$*"
 	config__create_file_if_not_exist
 
 	local workspace_name="$1"
 	local repo_name="$2"
-    local repos=($(config__workspace__get_repos "$workspace_name"))
 
-    if [[ -n $(yq ".workspaces.${workspace_name}.repos[] | select(. == \"$repo_name\")" "$CONFIG_FILE_PATH") ]]; then
-        return 0
-    else
-        return 1
-    fi
+	if [[ -n $(yq ".workspaces.[\"${workspace_name}\"].repos[] | select(. == \"$repo_name\")" "$CONFIG_FILE_PATH") ]]; then
+		return 0
+	else
+		return 1
+	fi
 }
 
 config__workspace__list() {
-	debug $LINENO "[config__workspace__list]" "$*"
+	debug "$LINENO" "[config__workspace__list]" "$*"
 	config__create_file_if_not_exist
-	
-    local return=$(yq '.workspaces | keys | .[]' "$CONFIG_FILE_PATH")
 
-    if [[ return == "null" ]]; then
-        echo ""
-        return 0
-    else
-        echo $return
-    fi
+	local result
+	result=$(yq '.workspaces | keys | .[]' "$CONFIG_FILE_PATH" 2>/dev/null) || true
+
+	if [[ -n "$result" && "$result" != "null" ]]; then
+		echo "$result"
+	fi
 }
 
 config__workspace__get_repos() {
-	debug $LINENO "[config__workspace__get_repos]" "$*"
+	debug "$LINENO" "[config__workspace__get_repos]" "$*"
 	config__create_file_if_not_exist
 
-    local workspace="${1:?}"
+	local workspace="${1:?}"
 
-    local return=$(yq ".workspaces.${workspace}.repos[]" "$CONFIG_FILE_PATH")
+	local result
+	result=$(yq ".workspaces.[\"${workspace}\"].repos[]" "$CONFIG_FILE_PATH" 2>/dev/null) || true
 
-    if [[ return == "null" ]]; then
-        echo ""
-        return 0
-    else
-        echo $return
-    fi
+	if [[ -n "$result" && "$result" != "null" ]]; then
+		echo "$result"
+	fi
 }
 
 
@@ -702,69 +790,66 @@ config__workspace__get_repos() {
 ########################
 
 config__repo__set() {
-	debug $LINENO "[config__repo__set]" "$*"
+	debug "$LINENO" "[config__repo__set]" "$*"
 	config__create_file_if_not_exist
 
 	local repo_url=${1:?}
 	local repo_name=${2:?}
 	local repo_dir=${3:?}
 
-	# yq eval ".repos += [{name: \"$repo_name\", url: \"$repo_url\"}]" -i "$config_path"
-	yq -i ".repos.${repo_name} = {\"origin_url\": \"$repo_url\", \"dir\": \"$repo_dir\"}" "$CONFIG_FILE_PATH"
+	yq -i ".repos.[\"${repo_name}\"] = {\"origin_url\": \"$repo_url\", \"dir\": \"$repo_dir\"}" "$CONFIG_FILE_PATH"
 }
 
 config__repo__remove_idempotent() {
-	debug $LINENO "[config__repo__remove_idempotent]" "$*"
+	debug "$LINENO" "[config__repo__remove_idempotent]" "$*"
 	config__create_file_if_not_exist
 	local repo_name=${1:?}
 
-	yq -i "del(.repos.${repo_name})" "$CONFIG_FILE_PATH"
+	yq -i "del(.repos.[\"${repo_name}\"])" "$CONFIG_FILE_PATH"
 }
 
 config__repo__list() {
-	debug $LINENO "[config__repo__list]" "$*"
+	debug "$LINENO" "[config__repo__list]" "$*"
 	config__create_file_if_not_exist
-	
-    local return=$(yq '.repos | keys | .[]' "$CONFIG_FILE_PATH")
 
-    if [[ return == "null" ]]; then
-        echo ""
-        return 0
-    else
-        echo $return
-    fi
+	local result
+	result=$(yq '.repos | keys | .[]' "$CONFIG_FILE_PATH" 2>/dev/null) || true
+
+	if [[ -n "$result" && "$result" != "null" ]]; then
+		echo "$result"
+	fi
 }
 
 config__repo__get_dir() {
-	debug $LINENO "[config__repo__get_dir]" "$*"
+	debug "$LINENO" "[config__repo__get_dir]" "$*"
 	config__create_file_if_not_exist
 	local repo_name="${1:?}"
 
-	local config_path="$CONFIG_FILE_PATH"
-	local return=$(yq -r ".repos.${repo_name}.dir" "$config_path")
-	if [[ "$return" == "null" ]]; then
-		echo ""
-	else
-		echo "$return"
+	local result
+	result=$(yq -r ".repos.[\"${repo_name}\"].dir" "$CONFIG_FILE_PATH")
+	if [[ -n "$result" && "$result" != "null" ]]; then
+		echo "$result"
 	fi
 }
 
 config__repo__get_originurl() {
-	debug $LINENO "[config__repo__get_originurl]" "$*"
+	debug "$LINENO" "[config__repo__get_originurl]" "$*"
 	config__create_file_if_not_exist
 	local repo_name=${1:?}
 
-	local return=$(yq -r ".repos.${repo_name}.origin_url" "$CONFIG_FILE_PATH")
-	if [[ "$return" == "null" ]]; then
+	local result
+	result=$(yq -r ".repos.[\"${repo_name}\"].origin_url" "$CONFIG_FILE_PATH")
+	if [[ "$result" == "null" ]]; then
 		echo ""
 	else
-		echo "$return"
+		echo "$result"
 	fi
 }
 
 config__create_file_if_not_exist() {
 	if [[ ! -f "$CONFIG_FILE_PATH" ]]; then
 		mkdir -p "$REPOS_DIR"
+		mkdir -p "$WORKSPACES_DIR"
 		touch "$CONFIG_FILE_PATH"
 	fi
 }
@@ -774,14 +859,14 @@ config__create_file_if_not_exist() {
 #######################
 
 git__add_repo_idempotent() {
-	debug $LINENO "[git__add_repo_idempotent]" "$*"
+	debug "$LINENO" "[git__add_repo_idempotent]" "$*"
 	local repo_url=${1:?}
 	local repo_name=${2:?}
 	local repo_dir="$(const__get_repo_dir "$repo_name")"
 
 	if ! git__validate_repo "$repo_url" "$repo_name"; then
 		warn "Pre-clone check: there is an issue with the repo. Clearing and re-cloning..."
-		rm -rf "$repo_dir"
+		fs__safe_rm_rf "$repo_dir" "$REPOS_DIR"
 		if ! git clone "$repo_url" "$repo_dir"; then
 			warn "Failed to clone repository $repo_name."
 			return 1
@@ -795,18 +880,18 @@ git__add_repo_idempotent() {
 # return 2 = yes repo
 # Checked by origin.
 git__validate_repo() {
-	debug $LINENO "[git__validate_repo]" "$*"
+	debug "$LINENO" "[git__validate_repo]" "$*"
 	local repo_url=${1:?}
 	local repo_name=${2:?}
 	local repo_dir="$(const__get_repo_dir "$repo_name")"
 
 	if [[ ! -d "$repo_dir" ]]; then
-		warn "Git::Validate Repo. Failed validation (repo does not exist, expected "$repo_dir")"
+		warn "Git::Validate Repo. Failed validation (repo does not exist, expected '$repo_dir')"
 		return 1
 	fi
 
-	if [[ "$(git__get_origin "$repo_name")" != "$repo_url" ]]; then
-		warn "Git::Validate Repo. Failed validation (expected origin "$repo_url", got $(git__get_origin "$repo_name"))"
+	if [[ "$(git__get_origin "$repo_dir")" != "$repo_url" ]]; then
+		warn "Git::Validate Repo. Failed validation (expected origin '$repo_url', got '$(git__get_origin "$repo_dir")')"
 		return 1
 	fi
 
@@ -814,54 +899,62 @@ git__validate_repo() {
 }
 
 git__get_origin() {
-	debug $LINENO "[git__get_origin]" "$*"
-	local repo_name=${1:?}
-	local repo_dir="$(const__get_repo_dir "$repo_name")"
+	debug "$LINENO" "[git__get_origin]" "$*"
+	local repo_dir=${1:?}
 
-	git -C "$repo_dir" remote get-url origin
+	git -C "$repo_dir" remote get-url origin 2>/dev/null || true
 }
 
 git__get_repo_name() {
-	debug $LINENO "[git__get_repo_name]" "$*"
+	debug "$LINENO" "[git__get_repo_name]" "$*"
 	local repo_url=${1:?}
 
-	if [[ "$repo_url" != *.git ]]; then
-		warn "Invalid repository URL: $repo_url. Please provide a valid Git repository URL."
+	local name
+	name="$(basename "$repo_url" .git)"
+
+	if [[ -z "$name" ]]; then
+		warn "Could not extract repository name from URL: $repo_url"
 		return 1
 	fi
 
-	basename "$repo_url" .git
+	echo "$name"
 }
 
 git__create_workspace_worktree_idempotent() {
-	debug $LINENO "[git__create_workspace_worktree_idempotent]" "$*"
+	debug "$LINENO" "[git__create_workspace_worktree_idempotent]" "$*"
 	local source_repo_dir="$1"
 	local destination_worktree_dir="$2"
 	local branch_name="$3"
 
 	if git__check_worktree_exists "$source_repo_dir" "$destination_worktree_dir"; then
-		debug $LINENO "[git__create_workspace_worktree_idempotent]" "Git worktree already exists" "$source_repo_dir" to "$destination_worktree_dir"
+		debug "$LINENO" "[git__create_workspace_worktree_idempotent]" "Git worktree already exists" "$source_repo_dir" to "$destination_worktree_dir"
 		return 0;
 	fi
 
-	git -C "$source_repo_dir" worktree add -b "$branch_name" "$destination_worktree_dir"
+	# Try creating with new branch first; if branch already exists, use it directly
+	if ! git -C "$source_repo_dir" worktree add -b "$branch_name" "$destination_worktree_dir" 2>/dev/null; then
+		git -C "$source_repo_dir" worktree add "$destination_worktree_dir" "$branch_name"
+	fi
 }
 
 git__remove_workspace_worktree_idempotent() {
-	debug $LINENO "[git__remove_workspace_worktree_idempotent]" "$*"
+	debug "$LINENO" "[git__remove_workspace_worktree_idempotent]" "$*"
 	local source_repo_dir="$1"
 	local destination_worktree_dir="$2"
 
 	if ! git__check_worktree_exists "$source_repo_dir" "$destination_worktree_dir"; then
-		debug $LINENO "[git__remove_workspace_worktree_idempotent]" "Git worktree does not exist" "$source_repo_dir" to "$destination_worktree_dir"
+		debug "$LINENO" "[git__remove_workspace_worktree_idempotent]" "Git worktree does not exist" "$source_repo_dir" to "$destination_worktree_dir"
 		return 0;
 	fi
 
-    git -C "$source_repo_dir" worktree remove --force "$destination_worktree_dir" 2>/dev/null
+	if ! git -C "$source_repo_dir" worktree remove --force "$destination_worktree_dir"; then
+		warn "Failed to remove git worktree at '$destination_worktree_dir'"
+		return 1
+	fi
 }
 
 git__check_worktree_exists() {
-	debug $LINENO "[git__check_worktree_exists]" "$*"
+	debug "$LINENO" "[git__check_worktree_exists]" "$*"
 	local source_repo_dir="$1"
 	local destination_worktree_dir="$2"
 
@@ -879,34 +972,35 @@ git__check_worktree_exists() {
 
 # Create workspace dir and return the path
 fs__workspace_mkdir_idempotent() {
-	debug $LINENO "[fs__workspace_mkdir_idempotent]" "$*"
+	debug "$LINENO" "[fs__workspace_mkdir_idempotent]" "$*"
 	local workspace_name="$1"
 
 	if [[ -z "$workspace_name" ]]; then
 		fatal "Workspace name is empty"
 	fi
 
-	local workspace_dir=$(fs__workspace_get_dir "$workspace_name")
+	local workspace_dir
+	workspace_dir=$(fs__workspace_get_dir "$workspace_name")
 
-	mkdir -p "$workspace_dir" &> /dev/null
+	mkdir -p "$workspace_dir"
 }
 
 fs__workspace_get_repo_subtree_dir() {
-	debug $LINENO "[fs__workspace_get_dir]" "$*"
-    local workspace_name="$1"
+	debug "$LINENO" "[fs__workspace_get_repo_subtree_dir]" "$*"
+	local workspace_name="$1"
 	if [[ -z "$workspace_name" ]]; then
 		fatal "Workspace name is empty"
 	fi
-    local repo_name="$2"
+	local repo_name="$2"
 	if [[ -z "$repo_name" ]]; then
 		fatal "Repo name is empty"
 	fi
 
-    echo "$(fs__workspace_get_dir $workspace_name)/$repo_name"
+	echo "$(fs__workspace_get_dir "$workspace_name")/$repo_name"
 }
 
 fs__workspace_get_dir() {
-	debug $LINENO "[fs__workspace_get_dir]" "$*"
+	debug "$LINENO" "[fs__workspace_get_dir]" "$*"
     local workspace_name="$1"
 	if [[ -z "$workspace_name" ]]; then
 		fatal "Workspace name is empty"
@@ -916,22 +1010,45 @@ fs__workspace_get_dir() {
 }
 
 
+fs__safe_rm_rf() {
+	debug "$LINENO" "[fs__safe_rm_rf]" "$*"
+	local target="$1"
+	local allowed_parent="$2"
+
+	if [[ -z "$target" || "$target" == "/" ]]; then
+		echo "[FATAL] Refusing to rm -rf empty or root path" >&2
+		exit 1
+	fi
+
+	# Resolve paths (use -m to allow non-existent targets)
+	local resolved
+	resolved="$(realpath -m "$target" 2>/dev/null || echo "$target")"
+	local resolved_parent
+	resolved_parent="$(realpath "$allowed_parent" 2>/dev/null || echo "$allowed_parent")"
+
+	if [[ "$resolved" != "$resolved_parent"/* ]]; then
+		echo "[FATAL] Refusing to delete '$resolved' — not under '$resolved_parent'" >&2
+		exit 1
+	fi
+
+	rm -rf "$resolved"
+}
+
 #############################
 ##### Dependency Checks #####
 #############################
 
 dependency__assert() {
-	debug $LINENO "[dependency__assert]" "$*"
-	local dependency=$1
+	debug "$LINENO" "[dependency__assert]" "$*"
+	local dependency="$1"
 	local error_message=${2:-"$dependency is not installed. Please install $dependency and try again."}
-	if ! command -v $dependency &>/dev/null; then
-		warn "$error_message"
-		exit 1
+	if ! command -v "$dependency" &>/dev/null; then
+		fatal "$error_message"
 	fi
 }
 
 dependency__assert_git() {
-	debug $LINENO "[dependency__assert_git]" "$*"
+	debug "$LINENO" "[dependency__assert_git]" "$*"
 	if env_is_macos; then
 		dependency__assert "git" $'Git is required on macOS. Please install it with: \n brew install git \n and try again.'
 	else
@@ -939,13 +1056,8 @@ dependency__assert_git() {
 	fi
 }
 
-dependency__assert_docker() {
-	debug $LINENO "[dependency__assert_docker]" "$*"
-	dependency__assert "docker"
-}
-
 dependency__assert_yq() {
-	debug $LINENO "[dependency__assert_yq]" "$*"
+	debug "$LINENO" "[dependency__assert_yq]" "$*"
 	if env_is_macos; then
 		dependency__assert "yq" $'yq is required on macOS. Please install it with: \n brew install yq \n and try again.'
 	else
@@ -964,7 +1076,7 @@ const__get_repo_dir() {
 }
 
 env_is_macos() {
-	debug $LINENO "[env_is_macos]" "$*"
+	debug "$LINENO" "[env_is_macos]" "$*"
 	[[ "$(uname)" == "Darwin" ]]
 }
 
@@ -978,16 +1090,29 @@ env__get_caller_workspace() {
 	fi
 }
 
+validate_name() {
+	local name="$1"
+	local label="${2:-name}"
+	if [[ ! "$name" =~ ^[a-zA-Z0-9/_-]+$ ]]; then
+		echo "[FATAL] Invalid $label: '$name'. Only alphanumeric characters, dashes, underscores, and slashes are allowed." >&2
+		exit 1
+	fi
+}
+
 print_table_vertically() {
-	debug $LINENO "[print_table_vertically]" "$*"
+	debug "$LINENO" "[print_table_vertically]" "$*"
 	local n_cols=${1:?}
 	shift
 
 	local n_cells="$#"
 	local cells=("$@")
 
+	if [[ $n_cells -eq 0 ]]; then
+		return 0
+	fi
+
 	local n_rows=$(( n_cells / n_cols ))
-	local leftover_cells=$(( n_cells % n_rows ))
+	local leftover_cells=$(( n_cells % n_cols ))
 
 	if [[ $leftover_cells -ne 0 ]]; then
 		warn "Table has leftover cells: $leftover_cells"
@@ -1009,7 +1134,7 @@ print_table_vertically() {
 }
 
 print_table_horizontally() {
-	debug $LINENO "[print_table_horizontally]" "$*"
+	debug "$LINENO" "[print_table_horizontally]" "$*"
 	local n_cols=${1:?}
 	shift
 	local cells=("$@")
