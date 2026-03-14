@@ -4,137 +4,137 @@ set -euo pipefail
 ## Control Sequences ##
 
 if [[ -t 1 ]] && [[ -z "${NO_COLOR:-}" ]]; then
-    RESET='\033[0m'
-    BOLD='\033[1m'
-    DIM='\033[2m'
-    ITALIC='\033[3m'
-    UNDERLINE='\033[4m'
-    BLINK='\033[5m'
-    BLINK_FAST='\033[6m'
-    REVERSE='\033[7m'
-    HIDDEN='\033[8m'
-    STRIKETHROUGH='\033[9m'
+	RESET='\033[0m'
+	BOLD='\033[1m'
+	DIM='\033[2m'
+	ITALIC='\033[3m'
+	UNDERLINE='\033[4m'
+	BLINK='\033[5m'
+	BLINK_FAST='\033[6m'
+	REVERSE='\033[7m'
+	HIDDEN='\033[8m'
+	STRIKETHROUGH='\033[9m'
 
-    BLACK='\033[30m'
-    RED='\033[31m'
-    GREEN='\033[32m'
-    YELLOW='\033[33m'
-    BLUE='\033[34m'
-    MAGENTA='\033[35m'
-    CYAN='\033[36m'
-    WHITE='\033[37m'
-    DEFAULT='\033[39m'
+	BLACK='\033[30m'
+	RED='\033[31m'
+	GREEN='\033[32m'
+	YELLOW='\033[33m'
+	BLUE='\033[34m'
+	MAGENTA='\033[35m'
+	CYAN='\033[36m'
+	WHITE='\033[37m'
+	DEFAULT='\033[39m'
 
-    BRIGHT_BLACK='\033[90m' # (Dark Gray)
-    BRIGHT_RED='\033[91m'
-    BRIGHT_GREEN='\033[92m'
-    BRIGHT_YELLOW='\033[93m'
-    BRIGHT_BLUE='\033[94m'
-    BRIGHT_MAGENTA='\033[95m'
-    BRIGHT_CYAN='\033[96m'
-    BRIGHT_WHITE='\033[97m'
+	BRIGHT_BLACK='\033[90m' # (Dark Gray)
+	BRIGHT_RED='\033[91m'
+	BRIGHT_GREEN='\033[92m'
+	BRIGHT_YELLOW='\033[93m'
+	BRIGHT_BLUE='\033[94m'
+	BRIGHT_MAGENTA='\033[95m'
+	BRIGHT_CYAN='\033[96m'
+	BRIGHT_WHITE='\033[97m'
 
-    BG_BLACK='\033[40m'
-    BG_RED='\033[41m'
-    BG_GREEN='\033[42m'
-    BG_YELLOW='\033[43m'
-    BG_BLUE='\033[44m'
-    BG_MAGENTA='\033[45m'
-    BG_CYAN='\033[46m'
-    BG_WHITE='\033[47m'
-    BG_DEFAULT='\033[49m'
+	BG_BLACK='\033[40m'
+	BG_RED='\033[41m'
+	BG_GREEN='\033[42m'
+	BG_YELLOW='\033[43m'
+	BG_BLUE='\033[44m'
+	BG_MAGENTA='\033[45m'
+	BG_CYAN='\033[46m'
+	BG_WHITE='\033[47m'
+	BG_DEFAULT='\033[49m'
 
-    BG_BRIGHT_BLACK='\033[100m'
-    BG_BRIGHT_RED='\033[101m'
-    BG_BRIGHT_GREEN='\033[102m'
-    BG_BRIGHT_YELLOW='\033[103m'
-    BG_BRIGHT_BLUE='\033[104m'
-    BG_BRIGHT_MAGENTA='\033[105m'
-    BG_BRIGHT_CYAN='\033[106m'
-    BG_BRIGHT_WHITE='\033[107m'
+	BG_BRIGHT_BLACK='\033[100m'
+	BG_BRIGHT_RED='\033[101m'
+	BG_BRIGHT_GREEN='\033[102m'
+	BG_BRIGHT_YELLOW='\033[103m'
+	BG_BRIGHT_BLUE='\033[104m'
+	BG_BRIGHT_MAGENTA='\033[105m'
+	BG_BRIGHT_CYAN='\033[106m'
+	BG_BRIGHT_WHITE='\033[107m'
 
-    CURSOR_UP='\033[1A'
-    CURSOR_DOWN='\033[1B'
-    CURSOR_RIGHT='\033[1C'
-    CURSOR_LEFT='\033[1D'
-    CURSOR_HOME='\033[H'    # Move to top-left
-    CURSOR_SAVE='\033[s'    # Save cursor position
-    CURSOR_RESTORE='\033[u' # Restore cursor position
-    CURSOR_HIDE='\033[?25l'
-    CURSOR_SHOW='\033[?25h'
+	CURSOR_UP='\033[1A'
+	CURSOR_DOWN='\033[1B'
+	CURSOR_RIGHT='\033[1C'
+	CURSOR_LEFT='\033[1D'
+	CURSOR_HOME='\033[H'    # Move to top-left
+	CURSOR_SAVE='\033[s'    # Save cursor position
+	CURSOR_RESTORE='\033[u' # Restore cursor position
+	CURSOR_HIDE='\033[?25l'
+	CURSOR_SHOW='\033[?25h'
 
-    ERASE_LINE='\033[2K'         # Erase entire current line
-    ERASE_LINE_END='\033[K'      # Erase from cursor to end of line
-    ERASE_LINE_START='\033[1K'   # Erase from cursor to start of line
-    ERASE_SCREEN='\033[2J'       # Erase entire screen
-    ERASE_SCREEN_END='\033[0J'   # Erase from cursor to end of screen
-    ERASE_SCREEN_START='\033[1J' # Erase from cursor to start of screen
+	ERASE_LINE='\033[2K'         # Erase entire current line
+	ERASE_LINE_END='\033[K'      # Erase from cursor to end of line
+	ERASE_LINE_START='\033[1K'   # Erase from cursor to start of line
+	ERASE_SCREEN='\033[2J'       # Erase entire screen
+	ERASE_SCREEN_END='\033[0J'   # Erase from cursor to end of screen
+	ERASE_SCREEN_START='\033[1J' # Erase from cursor to start of screen
 else
-    RESET=''
-    BOLD=''
-    DIM=''
-    ITALIC=''
-    UNDERLINE=''
-    BLINK=''
-    BLINK_FAST=''
-    REVERSE=''
-    HIDDEN=''
-    STRIKETHROUGH=''
+	RESET=''
+	BOLD=''
+	DIM=''
+	ITALIC=''
+	UNDERLINE=''
+	BLINK=''
+	BLINK_FAST=''
+	REVERSE=''
+	HIDDEN=''
+	STRIKETHROUGH=''
 
-    BLACK=''
-    RED=''
-    GREEN=''
-    YELLOW=''
-    BLUE=''
-    MAGENTA=''
-    CYAN=''
-    WHITE=''
-    DEFAULT=''
+	BLACK=''
+	RED=''
+	GREEN=''
+	YELLOW=''
+	BLUE=''
+	MAGENTA=''
+	CYAN=''
+	WHITE=''
+	DEFAULT=''
 
-    BRIGHT_BLACK=''
-    BRIGHT_RED=''
-    BRIGHT_GREEN=''
-    BRIGHT_YELLOW=''
-    BRIGHT_BLUE=''
-    BRIGHT_MAGENTA=''
-    BRIGHT_CYAN=''
-    BRIGHT_WHITE=''
+	BRIGHT_BLACK=''
+	BRIGHT_RED=''
+	BRIGHT_GREEN=''
+	BRIGHT_YELLOW=''
+	BRIGHT_BLUE=''
+	BRIGHT_MAGENTA=''
+	BRIGHT_CYAN=''
+	BRIGHT_WHITE=''
 
-    BG_BLACK=''
-    BG_RED=''
-    BG_GREEN=''
-    BG_YELLOW=''
-    BG_BLUE=''
-    BG_MAGENTA=''
-    BG_CYAN=''
-    BG_WHITE=''
-    BG_DEFAULT=''
+	BG_BLACK=''
+	BG_RED=''
+	BG_GREEN=''
+	BG_YELLOW=''
+	BG_BLUE=''
+	BG_MAGENTA=''
+	BG_CYAN=''
+	BG_WHITE=''
+	BG_DEFAULT=''
 
-    BG_BRIGHT_BLACK=''
-    BG_BRIGHT_RED=''
-    BG_BRIGHT_GREEN=''
-    BG_BRIGHT_YELLOW=''
-    BG_BRIGHT_BLUE=''
-    BG_BRIGHT_MAGENTA=''
-    BG_BRIGHT_CYAN=''
-    BG_BRIGHT_WHITE=''
+	BG_BRIGHT_BLACK=''
+	BG_BRIGHT_RED=''
+	BG_BRIGHT_GREEN=''
+	BG_BRIGHT_YELLOW=''
+	BG_BRIGHT_BLUE=''
+	BG_BRIGHT_MAGENTA=''
+	BG_BRIGHT_CYAN=''
+	BG_BRIGHT_WHITE=''
 
-    CURSOR_UP=''
-    CURSOR_DOWN=''
-    CURSOR_RIGHT=''
-    CURSOR_LEFT=''
-    CURSOR_HOME=''
-    CURSOR_SAVE=''
-    CURSOR_RESTORE=''
-    CURSOR_HIDE=''
-    CURSOR_SHOW=''
+	CURSOR_UP=''
+	CURSOR_DOWN=''
+	CURSOR_RIGHT=''
+	CURSOR_LEFT=''
+	CURSOR_HOME=''
+	CURSOR_SAVE=''
+	CURSOR_RESTORE=''
+	CURSOR_HIDE=''
+	CURSOR_SHOW=''
 
-    ERASE_LINE=''
-    ERASE_LINE_END=''
-    ERASE_LINE_START=''
-    ERASE_SCREEN=''
-    ERASE_SCREEN_END=''
-    ERASE_SCREEN_START=''
+	ERASE_LINE=''
+	ERASE_LINE_END=''
+	ERASE_LINE_START=''
+	ERASE_SCREEN=''
+	ERASE_SCREEN_END=''
+	ERASE_SCREEN_START=''
 fi
 
 ## Project Variables ##
@@ -158,7 +158,7 @@ trap 'echo "Error on line $LINENO in ${FUNCNAME[0]:-main}" >&2; debug_stack_trac
 fatal() {
 	echo -e "[FATAL] $*" >&2
 	debug_stack_trace
-    exit 1
+	exit 1
 }
 
 warn() {
@@ -175,8 +175,8 @@ info() {
 
 debug() {
 	if [[ -z ${DEBUG:-} ]]; then
-        return 0
-    fi
+		return 0
+	fi
 	echo -e "[DEBUG] ${BASH_SOURCE[1]}:${BASH_LINENO[0]} ${FUNCNAME[1]}() $*" >&2
 }
 
@@ -276,13 +276,22 @@ cmd__workspace() {
 
 # Functions as both "create workspace" and "add repo to workspace"
 cmd__workspace__add() {
+	local USAGE="
+
+Usage (workspace add):
+    $SCRIPT_NAME workspace add <workspace_name> [repo1 repo2 ...]
+    $SCRIPT_NAME workspace add-repo <workspace_name> [repo1 repo2 ...]
+
+Creates a workspace and/or adds repos to an existing workspace.
+"
+
 	local curr_workspace
-	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace) ; then
+	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace); then
 		info "Workspace detected as $curr_workspace"
 		set -- "$curr_workspace" "$@"
 	fi
 
-	local workspace_name="${1:?"workspace name is required"}"
+	local workspace_name="${1:?"Error: workspace name is required.$USAGE"}"
 	validate_name "$workspace_name" "workspace name"
 	shift
 	local workspace_repos=("$@")
@@ -291,58 +300,96 @@ cmd__workspace__add() {
 }
 
 cmd__workspace__delete() {
+	local USAGE="
+
+Usage (workspace delete):
+    $SCRIPT_NAME workspace delete <workspace_name>
+
+Deletes a workspace and its worktree directories.
+"
+
 	local curr_workspace
-	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace) ; then
+	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace); then
 		info "Workspace detected as $curr_workspace"
 		set -- "$curr_workspace" "$@"
 	fi
 
-	local workspace_name="${1:?"workspace name is required"}"
+	local workspace_name="${1:?"Error: workspace name is required.$USAGE"}"
 	validate_name "$workspace_name" "workspace name"
 	workspace__delete "$workspace_name"
 }
 
 cmd__workspace__list() {
-    workspace__list
+	local USAGE="
+
+Usage (workspace list):
+    $SCRIPT_NAME workspaces
+    $SCRIPT_NAME workspace list
+
+Lists all workspaces.
+"
+
+	workspace__list
 }
 
 cmd__workspace__remove_repo() {
+	local USAGE="
+
+Usage (workspace remove-repo):
+    $SCRIPT_NAME workspace remove-repo <workspace_name> <repo1> [repo2 ...]
+
+Removes one or more repos from a workspace.
+"
+
 	local curr_workspace
-	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace) ; then
+	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace); then
 		info "Workspace detected as $curr_workspace"
 		set -- "$curr_workspace" "$@"
 	fi
 
-    local workspace_name="${1:?"workspace name is required"}"
+	local workspace_name="${1:?"Error: workspace name is required.$USAGE"}"
 	validate_name "$workspace_name" "workspace name"
 	shift
 	local repos_to_remove=("$@")
 
-    if [[ ${#repos_to_remove[@]} -eq 0 ]]; then
-        warn "No repos to remove from workspace $workspace_name"
-        return 0
-    fi
+	if [[ ${#repos_to_remove[@]} -eq 0 ]]; then
+		warn "Error: No repos to remove from workspace $workspace_name.$USAGE"
+		return 0
+	fi
 
-    workspace__remove_repos "$workspace_name" "${repos_to_remove[@]}"
+	workspace__remove_repos "$workspace_name" "${repos_to_remove[@]}"
 }
 
 cmd__workspace__exec() {
+	local USAGE="
+
+Usage (workspace exec):
+    $SCRIPT_NAME workspace exec <workspace_name> <command> [args ...]
+
+Executes a command in each repo directory of the workspace.
+"
+
 	local curr_workspace
-	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace) ; then
+	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace); then
 		info "Workspace detected as $curr_workspace"
 		set -- "$curr_workspace" "$@"
 	fi
 
-    local workspace_name="${1:?"workspace name is required"}"
+	local workspace_name="${1:?"Error: workspace name is required.$USAGE"}"
 	validate_name "$workspace_name" "workspace name"
 	shift
+
+	if [[ $# -eq 0 ]]; then
+		fatal "Error: command is required.$USAGE"
+	fi
+
 	local args=("$@")
 
 	workspace__exec "$workspace_name" "${args[@]}"
 }
 
 cmd__workspace__checkout() {
-    local USAGE="
+	local USAGE="
 
 Usage (workspace checkout):
     $SCRIPT_NAME workspace checkout <workspace_name> <branch_name>
@@ -353,26 +400,26 @@ If the branch does not exist, it is always created. The -b option does nothing, 
 "
 
 	local curr_workspace
-	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace) ; then
+	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace); then
 		info "Workspace detected as $curr_workspace"
 		set -- "$curr_workspace" "$@"
 	fi
 
-    local workspace_name="${1:?"Error: workspace_name is required.$USAGE"}"
-    validate_name "$workspace_name" "workspace name"
-    shift
-    if [[ "${1:?"Error: branch_name is required.$USAGE"}" == "-b" ]]; then
-        shift # ignore -b flag, because we want to treat checkout -b BRANCH vs checkout BRANCH to be the same
-    fi
-    local branch_name="${1:?"Error: branch_name is required.$USAGE"}"
-    validate_name "$branch_name" "branch name"
-    shift
+	local workspace_name="${1:?"Error: workspace_name is required.$USAGE"}"
+	validate_name "$workspace_name" "workspace name"
+	shift
+	if [[ "${1:?"Error: branch_name is required.$USAGE"}" == "-b" ]]; then
+		shift # ignore -b flag, because we want to treat checkout -b BRANCH vs checkout BRANCH to be the same
+	fi
+	local branch_name="${1:?"Error: branch_name is required.$USAGE"}"
+	validate_name "$branch_name" "branch name"
+	shift
 
-    if [[ "$#" -ne 0 ]]; then
-        fatal "Error: invalid syntax (too many parameters)." "$USAGE"
-    fi
+	if [[ "$#" -ne 0 ]]; then
+		fatal "Error: invalid syntax (too many parameters)." "$USAGE"
+	fi
 
-    workspace__checkout__branch "$workspace_name" "$branch_name"
+	workspace__checkout__branch "$workspace_name" "$branch_name"
 }
 
 ####################
@@ -403,8 +450,16 @@ cmd__repo() {
 }
 
 cmd__repo__add() {
+	local USAGE="
+
+Usage (repo add):
+    $SCRIPT_NAME repo add <repo_url> [repo_name]
+
+Registers a git repository. If repo_name is omitted, it is derived from the URL.
+"
+
 	debug "$*"
-	local repo_url=$1
+	local repo_url="${1:?"Error: repo_url is required.$USAGE"}"
 	local repo_name=${2:-}
 
 	if [[ -z "$repo_name" ]] && ! repo_name_from_url=$(git__get_repo_name "$repo_url"); then
@@ -419,24 +474,41 @@ cmd__repo__add() {
 }
 
 cmd__repo__remove() {
+	local USAGE="
+
+Usage (repo remove):
+    $SCRIPT_NAME repo remove <repo_name>
+
+Removes a registered repository.
+"
+
 	debug "$*"
-	local repo_name=$1
+	local repo_name="${1:?"Error: repo_name is required.$USAGE"}"
 	validate_name "$repo_name" "repo name"
 
 	repo__remove "$repo_name"
 }
 
 cmd__repo__list() {
+	local USAGE="
+
+Usage (repo list):
+    $SCRIPT_NAME repos
+    $SCRIPT_NAME repo list
+
+Lists all registered repositories.
+"
+
 	debug "$*"
 	repo__validate_all
 	local repos=($(config__repo__list))
 	local cells=()
 
-    for repo in "${repos[@]+"${repos[@]}"}"; do
-        cells+=("$repo")
-        cells+=("$(config__repo__get_originurl "$repo")")
-        cells+=("$(config__repo__get_dir "$repo")")
-    done
+	for repo in "${repos[@]+"${repos[@]}"}"; do
+		cells+=("$repo")
+		cells+=("$(config__repo__get_originurl "$repo")")
+		cells+=("$(config__repo__get_dir "$repo")")
+	done
 
 	print_table_horizontally 3 "repo" "origin" "directory" "${cells[@]+"${cells[@]}"}"
 }
@@ -454,23 +526,23 @@ workspace__add() {
 	shift
 	local workspace_repos=("$@")
 
-    if ! config__workspace__create_idempotent "$workspace_name"; then
-        warn "Failed to create workspace $workspace_name."
-        return 1
-    fi
-	
+	if ! config__workspace__create_idempotent "$workspace_name"; then
+		warn "Failed to create workspace $workspace_name."
+		return 1
+	fi
+
 	local workspace_dir
 	workspace_dir="$(fs__workspace_get_dir "$workspace_name")"
-    fs__workspace_mkdir_idempotent "$workspace_name"
+	fs__workspace_mkdir_idempotent "$workspace_name"
 
-    for repo in "${workspace_repos[@]+"${workspace_repos[@]}"}"; do
-        if [[ -z $repo ]]; then
-            continue
-        fi
-        if ! config__workspace__add_repo_idempotent "$workspace_name" "$repo"; then
-            warn "Failed to add repo $repo to workspace $workspace_name. Try again later."
-            continue
-        fi
+	for repo in "${workspace_repos[@]+"${workspace_repos[@]}"}"; do
+		if [[ -z $repo ]]; then
+			continue
+		fi
+		if ! config__workspace__add_repo_idempotent "$workspace_name" "$repo"; then
+			warn "Failed to add repo $repo to workspace $workspace_name. Try again later."
+			continue
+		fi
 
 		local repo_dir
 		repo_dir="$(config__repo__get_dir "$repo")"
@@ -478,12 +550,12 @@ workspace__add() {
 		local branch_name="$workspace_name"
 
 		if ! git__create_workspace_worktree_idempotent "$repo_dir" "$subtree_dir" "$branch_name"; then
-            warn "Failed to add git worktree of $repo to workspace $workspace_name. Maybe it already exists? Try again later."
-            continue
+			warn "Failed to add git worktree of $repo to workspace $workspace_name. Maybe it already exists? Try again later."
+			continue
 		fi
 
-        echo "Successfully added repo $repo to workspace $workspace_name."
-    done
+		echo "Successfully added repo $repo to workspace $workspace_name."
+	done
 }
 
 workspace__delete() {
@@ -514,18 +586,18 @@ workspace__list() {
 			continue
 		fi
 		local repos
-        repos=($(config__workspace__get_repos "$workspace"))
+		repos=($(config__workspace__get_repos "$workspace"))
 		local repo_cell=""
 		for i in "${!repos[@]}"; do
 			repo_cell+="${repos[$i]}"
-			if [[ i -lt $(( ${#repos[@]} - 1)) ]]; then
+			if [[ i -lt $((${#repos[@]} - 1)) ]]; then
 				repo_cell+=", "
 			fi
 		done
 		repos_column+=("$repo_cell")
 
-        local branch
-        branch="$(config__workspace__get_branch "$workspace")"
+		local branch
+		branch="$(config__workspace__get_branch "$workspace")"
 
 		branch_column+=("$branch")
 	done
@@ -536,7 +608,7 @@ workspace__list() {
 workspace__remove_repos() {
 	debug "$*"
 	workspace__validate_all
-    local workspace_name="${1:?"workspace name is required"}"
+	local workspace_name="${1:?"workspace name is required"}"
 	shift
 	# we checked this in cmd__workspace__remove_repo, so guaranteed to have value
 	local repos_to_remove=("$@")
@@ -548,17 +620,17 @@ workspace__remove_repos() {
 		subtree_dir="$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo")"
 		git__remove_workspace_worktree_idempotent "$repo_dir" "$subtree_dir"
 
-        if ! config__workspace__remove_repo_idempotent "$workspace_name" "$repo"; then
-            warn "Failed to remove repo $repo from workspace $workspace_name"
-        fi
-    done
+		if ! config__workspace__remove_repo_idempotent "$workspace_name" "$repo"; then
+			warn "Failed to remove repo $repo from workspace $workspace_name"
+		fi
+	done
 }
 
 workspace__exec() {
 	debug "$*"
 	workspace__validate_all
 
-    local workspace_name="${1:?"workspace name is required"}"
+	local workspace_name="${1:?"workspace name is required"}"
 	shift
 
 	if ! config__workspace__exists "$workspace_name"; then
@@ -579,8 +651,8 @@ workspace__checkout__branch() {
 	workspace__validate_all
 	repo__validate_all
 
-    local workspace_name="$1"
-    local branch_name="$2"
+	local workspace_name="$1"
+	local branch_name="$2"
 
 	if ! config__workspace__exists "$workspace_name"; then
 		fatal "Workspace $workspace_name does not exist"
@@ -588,24 +660,23 @@ workspace__checkout__branch() {
 
 	local repos=($(config__workspace__get_repos "$workspace_name"))
 
-    if ! config__workspace__set_branch_idempotent "$workspace_name" "$branch_name"; then
-        fatal "Failed to checkout branch $branch_name for workspace $workspace_name"
-    fi
+	if ! config__workspace__set_branch_idempotent "$workspace_name" "$branch_name"; then
+		fatal "Failed to checkout branch $branch_name for workspace $workspace_name"
+	fi
 
-    for repo_name in "${repos[@]+"${repos[@]}"}"; do
-        local destination_worktree_dir;
-        destination_worktree_dir="$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo_name")"
-        if ! git__checkout_branch_on_worktree "$destination_worktree_dir" "$branch_name"; then
-            warn "Failed to checkout branch $branch_name for repo $repo_name ($destination_worktree_dir) under workspace $workspace_name"
-        fi
-    done
+	for repo_name in "${repos[@]+"${repos[@]}"}"; do
+		local destination_worktree_dir
+		destination_worktree_dir="$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo_name")"
+		if ! git__checkout_branch_on_worktree "$destination_worktree_dir" "$branch_name"; then
+			warn "Failed to checkout branch $branch_name for repo $repo_name ($destination_worktree_dir) under workspace $workspace_name"
+		fi
+	done
 
 }
 
 workspace__validate_all() {
 	debug "$*"
 	local workspaces=($(config__workspace__list))
-
 
 	for workspace in "${workspaces[@]+"${workspaces[@]}"}"; do
 		if [[ -z "$workspace" ]]; then
@@ -655,13 +726,13 @@ repo__validate_all() {
 	config__create_file_if_not_exist
 
 	local repos
-    repos=($(config__repo__list))
-    
+	repos=($(config__repo__list))
+
 	for repo_name in "${repos[@]+"${repos[@]}"}"; do
-        # Funny bash business for empty arrays
-        if [[ -z $repo_name ]]; then
-            continue
-        fi
+		# Funny bash business for empty arrays
+		if [[ -z $repo_name ]]; then
+			continue
+		fi
 
 		repo__validate__restore_from_config "$repo_name"
 	done
@@ -746,8 +817,6 @@ repo__remove() {
 
 	echo "Repository $repo_name removed successfully."
 }
-
-
 
 ###############################
 ##### Yaml Configurations #####
@@ -859,11 +928,11 @@ config__workspace__set_branch_idempotent() {
 	config__create_file_if_not_exist
 
 	local workspace_name="${1:?}"
-    local branch_name="${2:?}"
+	local branch_name="${2:?}"
 
-    if config__test_workspace_branch_exists "$branch_name" && [[ "$(config__workspace__get_branch "$workspace_name")" != "$branch_name" ]]; then
-        fatal "Failed to set branch for workspace $workspace_name: Branch $branch_name already exists in a different workspace."
-    fi
+	if config__test_workspace_branch_exists "$branch_name" && [[ "$(config__workspace__get_branch "$workspace_name")" != "$branch_name" ]]; then
+		fatal "Failed to set branch for workspace $workspace_name: Branch $branch_name already exists in a different workspace."
+	fi
 
 	yq -i ".workspaces.[\"${workspace_name}\"].branch = \"$branch_name\"" "$CONFIG_FILE_PATH"
 }
@@ -872,24 +941,24 @@ config__test_workspace_branch_exists() {
 	debug "$*"
 	config__create_file_if_not_exist
 
-    local branch_name="${1:?}"
-    local workspaces
+	local branch_name="${1:?}"
+	local workspaces
 
-    workspaces=($(config__workspace__list))
-    for workspace_name in "${workspaces[@]+"${workspaces[@]}"}"; do
-        if [[ -z "$workspace_name" ]]; then
-            continue
-        fi
-        local current_branch
-        current_branch="$(config__workspace__get_branch "$workspace_name")"
-        if [[ "$current_branch" == "$branch_name" ]]; then
-            debug "Found branch $branch_name"
-            return 0;
-        fi
-    done
+	workspaces=($(config__workspace__list))
+	for workspace_name in "${workspaces[@]+"${workspaces[@]}"}"; do
+		if [[ -z "$workspace_name" ]]; then
+			continue
+		fi
+		local current_branch
+		current_branch="$(config__workspace__get_branch "$workspace_name")"
+		if [[ "$current_branch" == "$branch_name" ]]; then
+			debug "Found branch $branch_name"
+			return 0
+		fi
+	done
 
-    debug "Did not find $branch_name"
-    return 1;
+	debug "Did not find $branch_name"
+	return 1
 }
 
 config__workspace__get_branch() {
@@ -904,9 +973,9 @@ config__workspace__get_branch() {
 	if [[ -n "$result" && "$result" != "null" ]]; then
 		echo "$result"
 	else
-        # Default branch is the workspace name
-        echo "$workspace"
-    fi
+		# Default branch is the workspace name
+		echo "$workspace"
+	fi
 }
 
 config__workspace__list() {
@@ -920,7 +989,6 @@ config__workspace__list() {
 		echo "$result"
 	fi
 }
-
 
 ########################
 ### Yaml Repo Config ###
@@ -1067,7 +1135,7 @@ git__create_workspace_worktree_idempotent() {
 
 	if git__check_worktree_exists "$source_repo_dir" "$destination_worktree_dir"; then
 		debug "Git worktree already exists" "$source_repo_dir" to "$destination_worktree_dir"
-		return 0;
+		return 0
 	fi
 
 	# Try creating with new branch first; if branch already exists, use it directly
@@ -1083,7 +1151,7 @@ git__remove_workspace_worktree_idempotent() {
 
 	if ! git__check_worktree_exists "$source_repo_dir" "$destination_worktree_dir"; then
 		debug "Git worktree does not exist" "$source_repo_dir" to "$destination_worktree_dir"
-		return 0;
+		return 0
 	fi
 
 	if ! git -C "$source_repo_dir" worktree remove --force "$destination_worktree_dir"; then
@@ -1097,7 +1165,7 @@ git__check_worktree_exists() {
 	local source_repo_dir="$1"
 	local destination_worktree_dir="$2"
 
-	if [[ -z "$(git -C "$source_repo_dir" worktree list --porcelain | grep -e "^worktree " | cut -f 2 -d ' ' | grep -Fx "$destination_worktree_dir" )" ]]; then
+	if [[ -z "$(git -C "$source_repo_dir" worktree list --porcelain | grep -e "^worktree " | cut -f 2 -d ' ' | grep -Fx "$destination_worktree_dir")" ]]; then
 		return 1
 	else
 		return 0
@@ -1110,11 +1178,10 @@ git__checkout_branch_on_worktree() {
 	local checkout_branch_name="$2"
 
 	if ! git -C "$destination_worktree_dir" checkout -b "$checkout_branch_name" 2>/dev/null && ! git -C "$destination_worktree_dir" checkout "$checkout_branch_name"; then
-        warn "Failed to checkout branch $checkout_branch_name on $destination_worktree_dir"
+		warn "Failed to checkout branch $checkout_branch_name on $destination_worktree_dir"
 		return 1
 	fi
 }
-
 
 ######################
 ##### Filesystem #####
@@ -1151,14 +1218,13 @@ fs__workspace_get_repo_subtree_dir() {
 
 fs__workspace_get_dir() {
 	debug "$*"
-    local workspace_name="$1"
+	local workspace_name="$1"
 	if [[ -z "$workspace_name" ]]; then
 		fatal "Workspace name is empty"
 	fi
 
-    echo "$WORKSPACES_DIR/$workspace_name"
+	echo "$WORKSPACES_DIR/$workspace_name"
 }
-
 
 fs__safe_rm_rf() {
 	debug "$*"
@@ -1219,7 +1285,6 @@ dependency__assert_yq() {
 ##### Utils #####
 #################
 
-
 const__get_repo_dir() {
 	local repo_name="$1"
 	echo "$REPOS_DIR/$repo_name"
@@ -1232,9 +1297,9 @@ env_is_macos() {
 
 env__get_caller_workspace() {
 	if [[ "$PWD" == $WORKSPACES_DIR/* ]]; then
-        local temp="${PWD#$WORKSPACES_DIR/}"
-        echo "${temp%%/*}"
-        return 0
+		local temp="${PWD#$WORKSPACES_DIR/}"
+		echo "${temp%%/*}"
+		return 0
 	else
 		return 1
 	fi
@@ -1260,8 +1325,8 @@ print_table_vertically() {
 		return 0
 	fi
 
-	local n_rows=$(( n_cells / n_cols ))
-	local leftover_cells=$(( n_cells % n_cols ))
+	local n_rows=$((n_cells / n_cols))
+	local leftover_cells=$((n_cells % n_cols))
 
 	if [[ $leftover_cells -ne 0 ]]; then
 		warn "Table has leftover cells: $leftover_cells"
@@ -1271,9 +1336,9 @@ print_table_vertically() {
 	# We can just transpose and print horizontally
 	local transposed_cells=()
 
-	for ((r=0; r < $n_rows; r++)); do
-		for ((c=0; c < $n_cols; c++)); do
-			local cell_idx=$(( c * n_rows + r ))
+	for ((r = 0; r < $n_rows; r++)); do
+		for ((c = 0; c < $n_cols; c++)); do
+			local cell_idx=$((c * n_rows + r))
 			transposed_cells+=("${cells[$cell_idx]}")
 		done
 	done
