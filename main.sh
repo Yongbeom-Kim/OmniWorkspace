@@ -1106,7 +1106,7 @@ validate_name() {
 	local name="$1"
 	local label="${2:-name}"
 	if [[ ! "$name" =~ ^[a-zA-Z0-9/_-]*$ ]] || [[ $(echo "$name" | tr -cd '/' | wc -c) -gt 1 ]]; then
-		fatal "Invalid $label: '$name'. Only alphanumeric characters, dashes, underscores, and at most one slash are allowed." >&2
+		fatal "Invalid $label: '$name'. Only alphanumeric characters, dashes, underscores, and at most one slash are allowed."
 	fi
 }
 
