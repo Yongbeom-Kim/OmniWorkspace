@@ -195,6 +195,18 @@ debug_stack_trace() {
 }
 
 main() {
+	local USAGE="
+
+Usage:
+    $SCRIPT_NAME <command> [args]
+
+Commands:
+    workspace (ws, w, wsp)    Manage workspaces
+    workspaces (wss)          List all workspaces
+    repo (r)                  Manage repositories
+    repos (rs)                List all repositories
+"
+
 	debug "$*"
 	dependency__assert_git
 	dependency__assert_yq
@@ -202,9 +214,7 @@ main() {
 	local cmd="${1:-}"
 
 	if [[ -z "$cmd" ]]; then
-		echo "Usage: ows <command> [args]"
-		echo "Commands: workspace (ws), workspaces (wss), repo (r), repos (rs)"
-		exit 1
+		fatal "Error: command is required.$USAGE"
 	fi
 
 	case "$cmd" in
@@ -225,8 +235,7 @@ main() {
 		cmd__repo "$@"
 		;;
 	*)
-		echo "Unknown command: $cmd"
-		exit 1
+		fatal "Error: unknown command '$cmd'.$USAGE"
 		;;
 	esac
 }
@@ -240,6 +249,21 @@ main() {
 ####################
 
 cmd__workspace() {
+	local USAGE="
+
+Usage:
+    $SCRIPT_NAME workspace <sub-command> [args]
+
+Sub-commands:
+    add <name> [repos...]          Create a workspace or add repos to it
+    add-repo <name> [repos...]     Alias for add
+    remove-repo <name> <repos...>  Remove repos from a workspace
+    delete <name>                  Delete a workspace
+    list                           List all workspaces
+    exec <name> <command>          Run a command in each repo of a workspace
+    checkout <name> <branch>       Check out a branch across all repos
+"
+
 	debug "$*"
 
 	case ${1:-} in
@@ -268,8 +292,7 @@ cmd__workspace() {
 		cmd__workspace__checkout "$@"
 		;;
 	*)
-		echo "Unknown sub-command: ${1:-}. Available sub-commands: add, add-repo, remove-repo, delete, list, exec, checkout"
-		exit 1
+		fatal "Error: unknown sub-command '${1:-}'.$USAGE"
 		;;
 	esac
 }
@@ -427,6 +450,17 @@ If the branch does not exist, it is always created. The -b option does nothing, 
 ####################
 
 cmd__repo() {
+	local USAGE="
+
+Usage:
+    $SCRIPT_NAME repo <sub-command> [args]
+
+Sub-commands:
+    add <repo_url> [repo_name]  Register a git repository
+    remove <repo_name>          Remove a registered repository
+    list                        List all registered repositories
+"
+
 	debug "$*"
 	repo__validate_all
 	case ${1:-} in
@@ -443,8 +477,7 @@ cmd__repo() {
 		cmd__repo__list "$@"
 		;;
 	*)
-		echo "Unknown sub-command: ${1:-}. Available sub-commands: add, remove, list"
-		exit 1
+		fatal "Error: unknown sub-command '${1:-}'.$USAGE"
 		;;
 	esac
 }
