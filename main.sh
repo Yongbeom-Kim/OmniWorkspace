@@ -80,6 +80,7 @@ trap 'echo "Error on line $LINENO in ${FUNCNAME[0]:-main}" >&2; debug_stack_trac
 fatal() {
 	echo -e "[FATAL] $*" >&2
 	debug_stack_trace
+    exit 1
 }
 
 warn() {
@@ -210,7 +211,8 @@ cmd__workspace__delete() {
 		set -- "$curr_workspace" "$@"
 	fi
 
-    workspace__delete $workspace_name
+	local workspace_name="${1:?"workspace name is required"}"
+    workspace__delete "$workspace_name"
 }
 
 cmd__workspace__list() {
@@ -233,7 +235,7 @@ cmd__workspace__remove_repo() {
         return 0
     fi
     
-    workspace__remove_repo "$workspace_name" "${repos_to_remove[@]}"
+    workspace__remove_repos "$workspace_name" "${repos_to_remove[@]}"
 }
 
 cmd__workspace__exec() {
@@ -362,12 +364,15 @@ workspace__delete() {
 	workspace__validate_all
 	local workspace_name="$1"
 
-    if ! config__workspace__delete "$workspace_name"; then
+	local repos=($(config__workspace__get_repos "$workspace_name"))
+	workspace__remove_repo "$workspace_name" "${repos[@]+"${repos[@]}"}"
+
+	rm -rf "$(fs__workspace_get_dir "$workspace_name")"
+    
+    if ! config__workspace__delete_idempotent "$workspace_name"; then
         warn "Failed to delete workspace $workspace_name."
         return 1
     fi
-
-	# TODO: Delete all git worktrees
 }
 
 workspace__list() {
@@ -394,8 +399,8 @@ workspace__list() {
 	print_table_vertically 2 "workspace" "${workspaces[@]+"${workspaces[@]}"}" "repos" "${cells[@]+"${cells[@]}"}"
 }
 
-workspace__remove_repo() {
-	debug $LINENO "[workspace__remove_repo]" "$*"
+workspace__remove_repos() {
+	debug $LINENO "[workspace__remove_repos]" "$*"
 	workspace__validate_all
     local workspace_name="${1:?"workspace name is required"}"
 	shift
@@ -403,12 +408,14 @@ workspace__remove_repo() {
 	local repos_to_remove=("$@")
 
 	for repo in "${repos_to_remove[@]+"${repos_to_remove[@]}"}"; do
+		local repo_dir="$(config__repo__get_dir "$repo")"
+		local subtree_dir="$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo")"
+		git__remove_workspace_worktree_idempotent "$repo_dir" "$subtree_dir"
+
         if ! config__workspace__remove_repo_idempotent "$workspace_name" "$repo"; then
             warn "Failed to remove repo $repo from workspace $workspace_name"
         fi
     done
-
-	# TODO: delete the repo's particular worktree
 }
 
 workspace__exec() {
@@ -418,7 +425,17 @@ workspace__exec() {
     local workspace_name="${1:?"workspace name is required"}"
 	shift
 
-	local workspace_dir="$(fs__workspace_mkdir "$workspace_name")"
+	if ! config__workspace__exists "$workspace_name"; then
+		warn "Workspace $workspace_name does not exist"
+		return 1
+	fi
+
+	local workspace_dir="$WORKSPACES_DIR/$workspace_name"
+	if [[ ! -d "$workspace_dir" ]]; then
+		warn "Workspace directory $workspace_dir does not exist"
+		return 1
+	fi
+
 	cd "$workspace_dir" && "$@"
 }
 
@@ -438,10 +455,11 @@ workspace__validate_all() {
 
 workspace__validate() {
 	debug $LINENO "[workspace__validate]" "$*"
-	local workspace="$1"
-	local workspace_dir="$(fs__workspace_mkdir "$workspace")"
-
+	local workspace_name="$1"
+	local workspace_dir="$(fs__workspace_get_dir "$workspace_name")"
 	local repos=($(config__workspace__get_repos "$workspace"))
+    
+    fs__workspace_mkdir_idempotent "$workspace"
 
 	for repo in "${repos[@]+"${repos[@]}"}"; do
 		if [[ -z "$repo" ]]; then
@@ -449,7 +467,7 @@ workspace__validate() {
 		fi
 
 		local repo_dir="$(config__repo__get_dir "$repo")"
-		local subtree_dir="$workspace_dir/$repo"
+		local subtree_dir=$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo")
 		local branch_name="$workspace"
 
 		if ! git__create_workspace_worktree_idempotent "$repo_dir" "$subtree_dir" "$branch_name"; then
@@ -507,7 +525,17 @@ repo__add() {
 
 	local repo_url=${1:?}
 	local repo_name=${2:?}
-	local repo_dir="$REPOS_DIR/$repo_name"
+	local repo_dir="${3:-$REPOS_DIR/$repo_name}"
+
+	# Check if repo already exists with the same config — skip if so
+	local existing_url=$(config__repo__get_originurl "$repo_name")
+	local existing_dir=$(config__repo__get_dir "$repo_name")
+	if [[ "$existing_url" == "$repo_url" && "$existing_dir" == "$repo_dir" ]]; then
+		if git__validate_repo "$repo_url" "$repo_name"; then
+			debug $LINENO "[repo__add]" "Repository $repo_name already exists with same config, skipping"
+			return 0
+		fi
+	fi
 
 	# Configs are always the source of truth, so we always add to config first.
 	if ! config__repo__set "$repo_url" "$repo_name" "$repo_dir"; then
@@ -516,7 +544,7 @@ repo__add() {
 	fi
 
 	if ! repo_dir=$(git__add_repo_idempotent "$repo_url" "$repo_name"); then
-		config__repo__remove "$repo_name"
+		config__repo__remove_idempotent "$repo_name"
 		warn "Failed to add repository $repo_name. Parameters: $repo_url, $repo_name"
 		return 1
 	fi
@@ -530,18 +558,16 @@ repo__remove() {
 	local repo_name=${1:?}
 	local repo_dir="$REPOS_DIR/$repo_name"
 
-	# Configs are always the source of truth, so we always remove from config first.
-	if ! rm -rf "$repo_dir"; then
-		warn "Failed to remove repository $repo_name."
+	# Remove directory if it exists
+	if [[ -d "$repo_dir" ]]; then
+		if ! rm -rf "$repo_dir"; then
+			warn "Failed to remove repository directory $repo_name."
+			return 1
+		fi
 	fi
 
-	if ! [[ -d "$repo_dir" ]]; then
-		warn "Repository $repo_name does not exist."
-	fi
-
-	if ! config__repo__remove "$repo_name"; then
-		warn "Failed to remove repository $repo_name from config."
-	fi
+	# Remove from config (idempotent — OK if already absent)
+	config__repo__remove_idempotent "$repo_name"
 
 	echo "Repository $repo_name removed successfully."
 }
@@ -559,7 +585,7 @@ CONFIG_FILE_PATH="$PROJ_DIR/config.yaml"
 #############################
 
 config__workspace__create_idempotent() {
-	debug $LINENO "[config__workspace__remove_repo_idempotent]" "$*"
+	debug $LINENO "[config__workspace__create_idempotent]" "$*"
 	config__create_file_if_not_exist
 
 	local workspace_name="$1"
@@ -576,15 +602,15 @@ config__workspace__create_idempotent() {
     fi
 }
 
-config__workspace__delete() {
-	debug $LINENO "[config__workspace__delete]" "$*"
+config__workspace__delete_idempotent() {
+	debug $LINENO "[config__workspace__delete_idempotent]" "$*"
 	config__create_file_if_not_exist
 
 	local workspace_name="$1"
 
     if ! config__workspace__exists "$workspace_name"; then
-        warn "Deleting workspace $workspace_name: does not exist"
-        return 1
+        warn "Deleting workspace $workspace_name: already absent"
+        return 0
     fi
 
     yq -i "del(.workspaces.${workspace_name})" "$CONFIG_FILE_PATH"
@@ -687,8 +713,8 @@ config__repo__set() {
 	yq -i ".repos.${repo_name} = {\"origin_url\": \"$repo_url\", \"dir\": \"$repo_dir\"}" "$CONFIG_FILE_PATH"
 }
 
-config__repo__remove() {
-	debug $LINENO "[config__repo__remove]" "$*"
+config__repo__remove_idempotent() {
+	debug $LINENO "[config__repo__remove_idempotent]" "$*"
 	config__create_file_if_not_exist
 	local repo_name=${1:?}
 
@@ -821,6 +847,19 @@ git__create_workspace_worktree_idempotent() {
 	git -C "$source_repo_dir" worktree add -b "$branch_name" "$destination_worktree_dir"
 }
 
+git__remove_workspace_worktree_idempotent() {
+	debug $LINENO "[git__create_workspace_worktree_idempotent]" "$*"
+	local source_repo_dir="$1"
+	local destination_worktree_dir="$2"
+
+	if ! git__check_worktree_exists "$source_repo_dir" "$destination_worktree_dir"; then
+		debug $LINENO "[git__create_workspace_worktree_idempotent]" "Git worktree already exists" "$source_repo_dir" to "$destination_worktree_dir"
+		return 0;
+	fi
+
+    git -C "$repo_dir" worktree remove --force "$subtree_dir" 2>/dev/null
+}
+
 git__check_worktree_exists() {
 	debug $LINENO "[git__check_worktree_exists]" "$*"
 	local source_repo_dir="$1"
@@ -839,19 +878,43 @@ git__check_worktree_exists() {
 ######################
 
 # Create workspace dir and return the path
-fs__workspace_mkdir() {
+fs__workspace_mkdir_idempotent() {
+	debug $LINENO "[fs__workspace_mkdir_idempotent]" "$*"
 	local workspace_name="$1"
+
 	if [[ -z "$workspace_name" ]]; then
 		fatal "Workspace name is empty"
-		return 1
 	fi
 
-	local workspace_dir="$WORKSPACES_DIR/$workspace_name"
+	local workspace_dir=$(fs__workspace_get_dir "$workspace_name")
 
 	mkdir -p "$workspace_dir" &> /dev/null
-	
-	echo "$workspace_dir"
 }
+
+fs__workspace_get_repo_subtree_dir() {
+	debug $LINENO "[fs__workspace_get_dir]" "$*"
+    local workspace_name="$1"
+	if [[ -z "$workspace_name" ]]; then
+		fatal "Workspace name is empty"
+	fi
+    local repo_name="$2"
+	if [[ -z "$repo_name" ]]; then
+		fatal "Repo name is empty"
+	fi
+
+    echo "$(fs__workspace_get_dir $workspace_name)/$repo_name"
+}
+
+fs__workspace_get_dir() {
+	debug $LINENO "[fs__workspace_get_dir]" "$*"
+    local workspace_name="$1"
+	if [[ -z "$workspace_name" ]]; then
+		fatal "Workspace name is empty"
+	fi
+
+    echo "$WORKSPACES_DIR/$workspace_name"
+}
+
 
 #############################
 ##### Dependency Checks #####
