@@ -365,7 +365,7 @@ workspace__delete() {
 	local workspace_name="$1"
 
 	local repos=($(config__workspace__get_repos "$workspace_name"))
-	workspace__remove_repo "$workspace_name" "${repos[@]+"${repos[@]}"}"
+	workspace__remove_repos "$workspace_name" "${repos[@]+"${repos[@]}"}"
 
 	rm -rf "$(fs__workspace_get_dir "$workspace_name")"
     
@@ -848,16 +848,16 @@ git__create_workspace_worktree_idempotent() {
 }
 
 git__remove_workspace_worktree_idempotent() {
-	debug $LINENO "[git__create_workspace_worktree_idempotent]" "$*"
+	debug $LINENO "[git__remove_workspace_worktree_idempotent]" "$*"
 	local source_repo_dir="$1"
 	local destination_worktree_dir="$2"
 
 	if ! git__check_worktree_exists "$source_repo_dir" "$destination_worktree_dir"; then
-		debug $LINENO "[git__create_workspace_worktree_idempotent]" "Git worktree already exists" "$source_repo_dir" to "$destination_worktree_dir"
+		debug $LINENO "[git__remove_workspace_worktree_idempotent]" "Git worktree does not exist" "$source_repo_dir" to "$destination_worktree_dir"
 		return 0;
 	fi
 
-    git -C "$repo_dir" worktree remove --force "$subtree_dir" 2>/dev/null
+    git -C "$source_repo_dir" worktree remove --force "$destination_worktree_dir" 2>/dev/null
 }
 
 git__check_worktree_exists() {
