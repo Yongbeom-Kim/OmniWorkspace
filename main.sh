@@ -1105,9 +1105,8 @@ env__get_caller_workspace() {
 validate_name() {
 	local name="$1"
 	local label="${2:-name}"
-	if [[ ! "$name" =~ ^[a-zA-Z0-9/_-]+$ ]]; then
-		echo "[FATAL] Invalid $label: '$name'. Only alphanumeric characters, dashes, underscores, and slashes are allowed." >&2
-		exit 1
+	if [[ ! "$name" =~ ^[a-zA-Z0-9/_-]*$ ]] || [[ $(echo "$name" | tr -cd '/' | wc -c) -gt 1 ]]; then
+		fatal "Invalid $label: '$name'. Only alphanumeric characters, dashes, underscores, and at most one slash are allowed." >&2
 	fi
 }
 
