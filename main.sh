@@ -143,6 +143,8 @@ SCRIPT_NAME=$(basename "$0")
 PROJ_DIR="${PROJ_DIR:-$HOME/.ows}"
 REPOS_DIR="${REPOS_DIR:-$PROJ_DIR/repos}"
 WORKSPACES_DIR="${WORKSPACES_DIR:-$PROJ_DIR/workspaces}"
+CONFIG_FILE_PATH="$PROJ_DIR/config.yaml"
+CONFIG_FILE_LOCK_DIR_PATH="$PROJ_DIR/config.lock" # mkdir as lock
 
 # Validate that critical directories are absolute paths under $HOME
 for _dir_var in PROJ_DIR REPOS_DIR WORKSPACES_DIR; do
@@ -153,7 +155,6 @@ for _dir_var in PROJ_DIR REPOS_DIR WORKSPACES_DIR; do
 done
 unset _dir_var
 
-trap 'echo "Error on line $LINENO in ${FUNCNAME[0]:-main}" >&2; debug_stack_trace' ERR
 
 fatal() {
 	echo -e "[FATAL] $*" >&2
@@ -206,6 +207,8 @@ Commands:
     repo (r)                  Manage repositories
     repos (rs)                List all repositories
 "
+	fs__acquire_lock
+	trap 'debug "Error on line $LINENO in ${FUNCNAME[0]:-main}"; debug_stack_trace; fs__release_lock' ERR EXIT SIGINT SIGTERM
 
 	debug "$*"
 	dependency__assert_git
@@ -855,8 +858,6 @@ repo__remove() {
 ##### Yaml Configurations #####
 ###############################
 
-CONFIG_FILE_PATH="$PROJ_DIR/config.yaml"
-
 #############################
 ### Yaml Workspace Config ###
 #############################
@@ -1259,6 +1260,43 @@ fs__workspace_get_dir() {
 	echo "$WORKSPACES_DIR/$workspace_name"
 }
 
+# lock (mkdir-based, atomic on all filesystems)
+fs__acquire_lock() {
+	# Detect and clean up stale locks from dead processes
+	local pid_file="$CONFIG_FILE_LOCK_DIR_PATH/pid"
+	if [[ -d "$CONFIG_FILE_LOCK_DIR_PATH" && -f "$pid_file" ]]; then
+		local stale_pid
+		stale_pid=$(<"$pid_file")
+		if ! kill -0 "$stale_pid" 2>/dev/null; then
+			warn "Removing stale lock from dead process (PID $stale_pid)"
+			rmdir "$CONFIG_FILE_LOCK_DIR_PATH" 2>/dev/null || fs__safe_rm_rf "$CONFIG_FILE_LOCK_DIR_PATH" "$PROJ_DIR"
+		fi
+	fi
+
+	if ! mkdir "$CONFIG_FILE_LOCK_DIR_PATH" 2>/dev/null; then
+		info "Another process is running $SCRIPT_NAME. Attempting to acquire lock..."
+		local retries=100
+		while ! mkdir "$CONFIG_FILE_LOCK_DIR_PATH" 2>/dev/null; do
+			retries=$((retries - 1))
+			if [[ $retries -eq 0 ]]; then
+				fatal "Error: Could not acquire lock. Check if there is another instance of $SCRIPT_NAME, or delete the lock directory $CONFIG_FILE_LOCK_DIR_PATH manually."
+			fi
+			sleep 0.1
+		done
+	fi
+
+	# Record our PID so other instances can detect stale locks
+	echo $$ > "$CONFIG_FILE_LOCK_DIR_PATH/pid"
+}
+
+fs__release_lock() {
+	if [[ -d "$CONFIG_FILE_LOCK_DIR_PATH" ]]; then
+		rm -f "$CONFIG_FILE_LOCK_DIR_PATH/pid"
+		rmdir "$CONFIG_FILE_LOCK_DIR_PATH"
+	fi
+}
+
+
 fs__safe_rm_rf() {
 	debug "$*"
 	local target="$1"
@@ -1282,7 +1320,6 @@ fs__safe_rm_rf() {
 
 	rm -rf "$resolved"
 }
-
 #############################
 ##### Dependency Checks #####
 #############################
