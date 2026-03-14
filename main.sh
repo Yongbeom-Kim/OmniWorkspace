@@ -421,7 +421,8 @@ workspace__add() {
         return 1
     fi
 	
-	local workspace_dir="$(fs__workspace_get_dir "$workspace_name")"
+	local workspace_dir
+	workspace_dir="$(fs__workspace_get_dir "$workspace_name")"
     fs__workspace_mkdir_idempotent "$workspace_name"
 
     for repo in "${workspace_repos[@]+"${workspace_repos[@]}"}"; do
@@ -433,7 +434,8 @@ workspace__add() {
             continue
         fi
 
-		local repo_dir="$(config__repo__get_dir "$repo")"
+		local repo_dir
+		repo_dir="$(config__repo__get_dir "$repo")"
 		local subtree_dir="$workspace_dir/$repo"
 		local branch_name="$workspace_name"
 
@@ -495,8 +497,10 @@ workspace__remove_repos() {
 	local repos_to_remove=("$@")
 
 	for repo in "${repos_to_remove[@]+"${repos_to_remove[@]}"}"; do
-		local repo_dir="$(config__repo__get_dir "$repo")"
-		local subtree_dir="$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo")"
+		local repo_dir
+		repo_dir="$(config__repo__get_dir "$repo")"
+		local subtree_dir
+		subtree_dir="$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo")"
 		git__remove_workspace_worktree_idempotent "$repo_dir" "$subtree_dir"
 
         if ! config__workspace__remove_repo_idempotent "$workspace_name" "$repo"; then
@@ -544,8 +548,10 @@ workspace__validate_all() {
 workspace__validate() {
 	debug "$*"
 	local workspace_name="$1"
-	local workspace_dir="$(fs__workspace_get_dir "$workspace_name")"
-	local repos=($(config__workspace__get_repos "$workspace_name"))
+	local workspace_dir
+	workspace_dir="$(fs__workspace_get_dir "$workspace_name")"
+	local repos
+	repos=($(config__workspace__get_repos "$workspace_name"))
 
 	fs__workspace_mkdir_idempotent "$workspace_name"
 
@@ -554,8 +560,10 @@ workspace__validate() {
 			continue
 		fi
 
-		local repo_dir="$(config__repo__get_dir "$repo")"
-		local subtree_dir=$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo")
+		local repo_dir
+		repo_dir="$(config__repo__get_dir "$repo")"
+		local subtree_dir
+		subtree_dir=$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo")
 		local branch_name="$workspace_name"
 
 		if ! git__create_workspace_worktree_idempotent "$repo_dir" "$subtree_dir" "$branch_name"; then
@@ -590,8 +598,10 @@ repo__validate_all() {
 repo__validate__restore_from_config() {
 	debug "$*"
 	local repo_name="$1"
-	local repo_dir=$(config__repo__get_dir "$repo_name")
-	local repo_originurl=$(config__repo__get_originurl "$repo_name")
+	local repo_dir
+	repo_dir=$(config__repo__get_dir "$repo_name")
+	local repo_originurl
+	repo_originurl=$(config__repo__get_originurl "$repo_name")
 
 	# 1. Try to reconstruct variables
 	if [[ -z "$repo_dir" ]]; then
@@ -619,8 +629,10 @@ repo__add() {
 	local repo_dir="${3:-$REPOS_DIR/$repo_name}"
 
 	# Check if repo already exists with the same config — skip if so
-	local existing_url=$(config__repo__get_originurl "$repo_name")
-	local existing_dir=$(config__repo__get_dir "$repo_name")
+	local existing_url
+	existing_url=$(config__repo__get_originurl "$repo_name")
+	local existing_dir
+	existing_dir=$(config__repo__get_dir "$repo_name")
 	if [[ "$existing_url" == "$repo_url" && "$existing_dir" == "$repo_dir" ]]; then
 		if git__validate_repo "$repo_url" "$repo_name"; then
 			debug "Repository $repo_name already exists with same config, skipping"
@@ -860,7 +872,8 @@ git__add_repo_idempotent() {
 	debug "$*"
 	local repo_url=${1:?}
 	local repo_name=${2:?}
-	local repo_dir="$(const__get_repo_dir "$repo_name")"
+	local repo_dir
+	repo_dir="$(const__get_repo_dir "$repo_name")"
 
 	if ! git__validate_repo "$repo_url" "$repo_name"; then
 		warn "Pre-clone check: there is an issue with the repo. Clearing and re-cloning..."
@@ -881,7 +894,8 @@ git__validate_repo() {
 	debug "$*"
 	local repo_url=${1:?}
 	local repo_name=${2:?}
-	local repo_dir="$(const__get_repo_dir "$repo_name")"
+	local repo_dir
+	repo_dir="$(const__get_repo_dir "$repo_name")"
 
 	if [[ ! -d "$repo_dir" ]]; then
 		warn "Git::Validate Repo. Failed validation (repo does not exist, expected '$repo_dir')"
