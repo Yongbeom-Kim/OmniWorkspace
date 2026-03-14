@@ -139,6 +139,7 @@ fi
 
 ## Project Variables ##
 
+SCRIPT_NAME=$(basename "$0")
 PROJ_DIR="${PROJ_DIR:-$HOME/.ows}"
 REPOS_DIR="${REPOS_DIR:-$PROJ_DIR/repos}"
 WORKSPACES_DIR="${WORKSPACES_DIR:-$PROJ_DIR/workspaces}"
@@ -262,8 +263,12 @@ cmd__workspace() {
 		shift
 		cmd__workspace__exec "$@"
 		;;
+	"checkout")
+		shift
+		cmd__workspace__checkout "$@"
+		;;
 	*)
-		echo "Unknown sub-command: ${1:-}. Available sub-commands: add, add-repo, remove-repo, delete, list, exec"
+		echo "Unknown sub-command: ${1:-}. Available sub-commands: add, add-repo, remove-repo, delete, list, exec, checkout"
 		exit 1
 		;;
 	esac
@@ -336,6 +341,40 @@ cmd__workspace__exec() {
 	workspace__exec "$workspace_name" "${args[@]}"
 }
 
+cmd__workspace__checkout() {
+    local USAGE="
+
+Usage (workspace checkout):
+    $SCRIPT_NAME workspace checkout <workspace_name> <branch_name>
+    $SCRIPT_NAME workspace checkout <workspace_name> -b <branch_name>
+
+Checks out all worktree repositories in a particular workspace to a given branch.
+If the branch does not exist, it is always created. The -b option does nothing, but exists to match the git checkout -b syntax.
+"
+
+	local curr_workspace
+	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace) ; then
+		info "Workspace detected as $curr_workspace"
+		set -- "$curr_workspace" "$@"
+	fi
+
+    local workspace_name="${1:?"Error: workspace_name is required.$USAGE"}"
+    validate_name "$workspace_name" "workspace name"
+    shift
+    if [[ "${1:?"Error: branch_name is required.$USAGE"}" == "-b" ]]; then
+        shift # ignore -b flag, because we want to treat checkout -b BRANCH vs checkout BRANCH to be the same
+    fi
+    local branch_name="${1:?"Error: branch_name is required.$USAGE"}"
+    validate_name "$branch_name" "branch name"
+    shift
+
+    if [[ "$#" -ne 0 ]]; then
+        fatal "Error: invalid syntax (too many parameters)." "$USAGE"
+    fi
+
+    workspace__checkout__branch "$workspace_name" "$branch_name"
+}
+
 ####################
 ### Repositories ###
 ####################
@@ -393,7 +432,6 @@ cmd__repo__list() {
 	local repos=($(config__repo__list))
 	local cells=()
 
-    # funny syntax to avoid throw on empty array
     for repo in "${repos[@]+"${repos[@]}"}"; do
         cells+=("$repo")
         cells+=("$(config__repo__get_originurl "$repo")")
@@ -468,24 +506,31 @@ workspace__list() {
 	debug "$*"
 	workspace__validate_all
 	local workspaces=($(config__workspace__list))
-	local cells=()
+	local repos_column=()
+	local branch_column=()
 
 	for workspace in "${workspaces[@]+"${workspaces[@]}"}"; do
 		if [[ -z "$workspace" ]]; then
 			continue
 		fi
-		local repos=($(config__workspace__get_repos "$workspace"))
-		local cell=""
+		local repos
+        repos=($(config__workspace__get_repos "$workspace"))
+		local repo_cell=""
 		for i in "${!repos[@]}"; do
-			cell+="${repos[$i]}"
+			repo_cell+="${repos[$i]}"
 			if [[ i -lt $(( ${#repos[@]} - 1)) ]]; then
-				cell+=", "
+				repo_cell+=", "
 			fi
 		done
-		cells+=("$cell")
+		repos_column+=("$repo_cell")
+
+        local branch
+        branch="$(config__workspace__get_branch "$workspace")"
+
+		branch_column+=("$branch")
 	done
 
-	print_table_vertically 2 "workspace" "${workspaces[@]+"${workspaces[@]}"}" "repos" "${cells[@]+"${cells[@]}"}"
+	print_table_vertically 3 "workspace" "${workspaces[@]+"${workspaces[@]}"}" "branch" "${branch_column[@]+"${branch_column[@]}"}" "repos" "${repos_column[@]+"${repos_column[@]}"}"
 }
 
 workspace__remove_repos() {
@@ -517,8 +562,7 @@ workspace__exec() {
 	shift
 
 	if ! config__workspace__exists "$workspace_name"; then
-		warn "Workspace $workspace_name does not exist"
-		return 1
+		fatal "Workspace $workspace_name does not exist"
 	fi
 
 	local workspace_dir="$WORKSPACES_DIR/$workspace_name"
@@ -528,6 +572,34 @@ workspace__exec() {
 	fi
 
 	cd "$workspace_dir" && "$@"
+}
+
+workspace__checkout__branch() {
+	debug "$*"
+	workspace__validate_all
+	repo__validate_all
+
+    local workspace_name="$1"
+    local branch_name="$2"
+
+	if ! config__workspace__exists "$workspace_name"; then
+		fatal "Workspace $workspace_name does not exist"
+	fi
+
+	local repos=($(config__workspace__get_repos "$workspace_name"))
+
+    if ! config__workspace__set_branch_idempotent "$workspace_name" "$branch_name"; then
+        fatal "Failed to checkout branch $branch_name for workspace $workspace_name"
+    fi
+
+    for repo_name in "${repos[@]+"${repos[@]}"}"; do
+        local destination_worktree_dir;
+        destination_worktree_dir="$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo_name")"
+        if ! git__checkout_branch_on_worktree "$destination_worktree_dir" "$branch_name"; then
+            warn "Failed to checkout branch $branch_name for repo $repo_name ($destination_worktree_dir) under workspace $workspace_name"
+        fi
+    done
+
 }
 
 workspace__validate_all() {
@@ -768,18 +840,6 @@ config__workspace__has_repo() {
 	fi
 }
 
-config__workspace__list() {
-	debug "$*"
-	config__create_file_if_not_exist
-
-	local result
-	result=$(yq '.workspaces | keys | .[]' "$CONFIG_FILE_PATH" 2>/dev/null) || true
-
-	if [[ -n "$result" && "$result" != "null" ]]; then
-		echo "$result"
-	fi
-}
-
 config__workspace__get_repos() {
 	debug "$*"
 	config__create_file_if_not_exist
@@ -788,6 +848,73 @@ config__workspace__get_repos() {
 
 	local result
 	result=$(yq ".workspaces.[\"${workspace}\"].repos[]" "$CONFIG_FILE_PATH" 2>/dev/null) || true
+
+	if [[ -n "$result" && "$result" != "null" ]]; then
+		echo "$result"
+	fi
+}
+
+config__workspace__set_branch_idempotent() {
+	debug "$*"
+	config__create_file_if_not_exist
+
+	local workspace_name="${1:?}"
+    local branch_name="${2:?}"
+
+    if config__test_workspace_branch_exists "$branch_name" && [[ "$(config__workspace__get_branch "$workspace_name")" != "$branch_name" ]]; then
+        fatal "Failed to set branch for workspace $workspace_name: Branch $branch_name already exists in a different workspace."
+    fi
+
+	yq -i ".workspaces.[\"${workspace_name}\"].branch = \"$branch_name\"" "$CONFIG_FILE_PATH"
+}
+
+config__test_workspace_branch_exists() {
+	debug "$*"
+	config__create_file_if_not_exist
+
+    local branch_name="${1:?}"
+    local workspaces
+
+    workspaces=($(config__workspace__list))
+    for workspace_name in "${workspaces[@]+"${workspaces[@]}"}"; do
+        if [[ -z "$workspace_name" ]]; then
+            continue
+        fi
+        local current_branch
+        current_branch="$(config__workspace__get_branch "$workspace_name")"
+        if [[ "$current_branch" == "$branch_name" ]]; then
+            debug "Found branch $branch_name"
+            return 0;
+        fi
+    done
+
+    debug "Did not find $branch_name"
+    return 1;
+}
+
+config__workspace__get_branch() {
+	debug "$*"
+	config__create_file_if_not_exist
+
+	local workspace="${1:?}"
+
+	local result
+	result=$(yq ".workspaces.[\"${workspace}\"].branch" "$CONFIG_FILE_PATH" 2>/dev/null) || true
+
+	if [[ -n "$result" && "$result" != "null" ]]; then
+		echo "$result"
+	else
+        # Default branch is the workspace name
+        echo "$workspace"
+    fi
+}
+
+config__workspace__list() {
+	debug "$*"
+	config__create_file_if_not_exist
+
+	local result
+	result=$(yq '.workspaces | keys | .[]' "$CONFIG_FILE_PATH" 2>/dev/null) || true
 
 	if [[ -n "$result" && "$result" != "null" ]]; then
 		echo "$result"
@@ -974,6 +1101,17 @@ git__check_worktree_exists() {
 		return 1
 	else
 		return 0
+	fi
+}
+
+git__checkout_branch_on_worktree() {
+	debug "$*"
+	local destination_worktree_dir="$1"
+	local checkout_branch_name="$2"
+
+	if ! git -C "$destination_worktree_dir" checkout -b "$checkout_branch_name" 2>/dev/null && ! git -C "$destination_worktree_dir" checkout "$checkout_branch_name"; then
+        warn "Failed to checkout branch $checkout_branch_name on $destination_worktree_dir"
+		return 1
 	fi
 }
 
