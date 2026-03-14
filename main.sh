@@ -174,11 +174,9 @@ info() {
 
 debug() {
 	if [[ -z ${DEBUG:-} ]]; then
-		return 0
-	fi
-	local line=${1:?}
-	shift
-	echo -e "[DEBUG] $0:$line $*" >&2
+        return 0
+    fi
+	echo -e "[DEBUG] ${BASH_SOURCE[1]}:${BASH_LINENO[0]} ${FUNCNAME[1]}() $*" >&2
 }
 
 debug_stack_trace() {
@@ -196,7 +194,7 @@ debug_stack_trace() {
 }
 
 main() {
-	debug "$LINENO" "[main]" "$*"
+	debug "$*"
 	dependency__assert_git
 	dependency__assert_yq
 
@@ -241,7 +239,7 @@ main() {
 ####################
 
 cmd__workspace() {
-	debug "$LINENO" "[cmd__workspace]" "$*"
+	debug "$*"
 
 	case ${1:-} in
 	"add" | "add-repo")
@@ -343,7 +341,7 @@ cmd__workspace__exec() {
 ####################
 
 cmd__repo() {
-	debug "$LINENO" "[cmd__repo]" "$*"
+	debug "$*"
 	repo__validate_all
 	case ${1:-} in
 	"add")
@@ -366,7 +364,7 @@ cmd__repo() {
 }
 
 cmd__repo__add() {
-	debug "$LINENO" "[cmd__repo__add]" "$*"
+	debug "$*"
 	local repo_url=$1
 	local repo_name=${2:-}
 
@@ -382,7 +380,7 @@ cmd__repo__add() {
 }
 
 cmd__repo__remove() {
-	debug "$LINENO" "[cmd__repo__remove]" "$*"
+	debug "$*"
 	local repo_name=$1
 	validate_name "$repo_name" "repo name"
 
@@ -390,7 +388,7 @@ cmd__repo__remove() {
 }
 
 cmd__repo__list() {
-	debug "$LINENO" "[cmd__repo__list]" "$*"
+	debug "$*"
 	repo__validate_all
 	local repos=($(config__repo__list))
 	local cells=()
@@ -410,7 +408,7 @@ cmd__repo__list() {
 ###########################################
 
 workspace__add() {
-	debug "$LINENO" "[workspace__add]" "$*"
+	debug "$*"
 	workspace__validate_all
 	repo__validate_all
 
@@ -449,7 +447,7 @@ workspace__add() {
 }
 
 workspace__delete() {
-	debug "$LINENO" "[workspace__delete]" "$*"
+	debug "$*"
 	workspace__validate_all
 	local workspace_name="$1"
 
@@ -465,7 +463,7 @@ workspace__delete() {
 }
 
 workspace__list() {
-	debug "$LINENO" "[workspace__list]" "$*"
+	debug "$*"
 	workspace__validate_all
 	local workspaces=($(config__workspace__list))
 	local cells=()
@@ -489,7 +487,7 @@ workspace__list() {
 }
 
 workspace__remove_repos() {
-	debug "$LINENO" "[workspace__remove_repos]" "$*"
+	debug "$*"
 	workspace__validate_all
     local workspace_name="${1:?"workspace name is required"}"
 	shift
@@ -508,7 +506,7 @@ workspace__remove_repos() {
 }
 
 workspace__exec() {
-	debug "$LINENO" "[workspace__exec]" "$*"
+	debug "$*"
 	workspace__validate_all
 
     local workspace_name="${1:?"workspace name is required"}"
@@ -529,7 +527,7 @@ workspace__exec() {
 }
 
 workspace__validate_all() {
-	debug "$LINENO" "[workspace__validate_all]" "$*"
+	debug "$*"
 	local workspaces=($(config__workspace__list))
 
 
@@ -544,7 +542,7 @@ workspace__validate_all() {
 }
 
 workspace__validate() {
-	debug "$LINENO" "[workspace__validate]" "$*"
+	debug "$*"
 	local workspace_name="$1"
 	local workspace_dir="$(fs__workspace_get_dir "$workspace_name")"
 	local repos=($(config__workspace__get_repos "$workspace_name"))
@@ -573,7 +571,7 @@ workspace__validate() {
 
 # Validate all repos.
 repo__validate_all() {
-	debug "$LINENO" "[repo__validate_all]" "$*"
+	debug "$*"
 	config__create_file_if_not_exist
 
 	local repos
@@ -590,7 +588,7 @@ repo__validate_all() {
 }
 
 repo__validate__restore_from_config() {
-	debug "$LINENO" "[repo__validate__restore_from_config]" "$*"
+	debug "$*"
 	local repo_name="$1"
 	local repo_dir=$(config__repo__get_dir "$repo_name")
 	local repo_originurl=$(config__repo__get_originurl "$repo_name")
@@ -614,7 +612,7 @@ repo__validate__restore_from_config() {
 }
 
 repo__add() {
-	debug "$LINENO" "[repo__add]" "$*"
+	debug "$*"
 
 	local repo_url=${1:?}
 	local repo_name=${2:?}
@@ -625,7 +623,7 @@ repo__add() {
 	local existing_dir=$(config__repo__get_dir "$repo_name")
 	if [[ "$existing_url" == "$repo_url" && "$existing_dir" == "$repo_dir" ]]; then
 		if git__validate_repo "$repo_url" "$repo_name"; then
-			debug "$LINENO" "[repo__add]" "Repository $repo_name already exists with same config, skipping"
+			debug "Repository $repo_name already exists with same config, skipping"
 			return 0
 		fi
 	fi
@@ -646,7 +644,7 @@ repo__add() {
 }
 
 repo__remove() {
-	debug "$LINENO" "[repo__remove]" "$*"
+	debug "$*"
 
 	local repo_name=${1:?}
 	local repo_dir="$REPOS_DIR/$repo_name"
@@ -678,7 +676,7 @@ CONFIG_FILE_PATH="$PROJ_DIR/config.yaml"
 #############################
 
 config__workspace__create_idempotent() {
-	debug "$LINENO" "[config__workspace__create_idempotent]" "$*"
+	debug "$*"
 	config__create_file_if_not_exist
 
 	local workspace_name="$1"
@@ -696,7 +694,7 @@ config__workspace__create_idempotent() {
 }
 
 config__workspace__delete_idempotent() {
-	debug "$LINENO" "[config__workspace__delete_idempotent]" "$*"
+	debug "$*"
 	config__create_file_if_not_exist
 
 	local workspace_name="$1"
@@ -710,7 +708,7 @@ config__workspace__delete_idempotent() {
 }
 
 config__workspace__add_repo_idempotent() {
-	debug "$LINENO" "[config__workspace__add_repo_idempotent]" "$*"
+	debug "$*"
 	config__create_file_if_not_exist
 	local workspace_name="$1"
 	local repo_name="$2"
@@ -724,7 +722,7 @@ config__workspace__add_repo_idempotent() {
 }
 
 config__workspace__remove_repo_idempotent() {
-	debug "$LINENO" "[config__workspace__remove_repo_idempotent]" "$*"
+	debug "$*"
 	config__create_file_if_not_exist
 	local workspace_name="$1"
 	local repo_name="$2"
@@ -738,14 +736,14 @@ config__workspace__remove_repo_idempotent() {
 }
 
 config__workspace__exists() {
-	debug "$LINENO" "[config__workspace__exists]" "$*"
+	debug "$*"
 	config__create_file_if_not_exist
 	local workspace_name="$1"
 	yq -e ".workspaces.[\"${workspace_name}\"]" "$CONFIG_FILE_PATH" &>/dev/null
 }
 
 config__workspace__has_repo() {
-	debug "$LINENO" "[config__workspace__has_repo]" "$*"
+	debug "$*"
 	config__create_file_if_not_exist
 
 	local workspace_name="$1"
@@ -759,7 +757,7 @@ config__workspace__has_repo() {
 }
 
 config__workspace__list() {
-	debug "$LINENO" "[config__workspace__list]" "$*"
+	debug "$*"
 	config__create_file_if_not_exist
 
 	local result
@@ -771,7 +769,7 @@ config__workspace__list() {
 }
 
 config__workspace__get_repos() {
-	debug "$LINENO" "[config__workspace__get_repos]" "$*"
+	debug "$*"
 	config__create_file_if_not_exist
 
 	local workspace="${1:?}"
@@ -790,7 +788,7 @@ config__workspace__get_repos() {
 ########################
 
 config__repo__set() {
-	debug "$LINENO" "[config__repo__set]" "$*"
+	debug "$*"
 	config__create_file_if_not_exist
 
 	local repo_url=${1:?}
@@ -801,7 +799,7 @@ config__repo__set() {
 }
 
 config__repo__remove_idempotent() {
-	debug "$LINENO" "[config__repo__remove_idempotent]" "$*"
+	debug "$*"
 	config__create_file_if_not_exist
 	local repo_name=${1:?}
 
@@ -809,7 +807,7 @@ config__repo__remove_idempotent() {
 }
 
 config__repo__list() {
-	debug "$LINENO" "[config__repo__list]" "$*"
+	debug "$*"
 	config__create_file_if_not_exist
 
 	local result
@@ -821,7 +819,7 @@ config__repo__list() {
 }
 
 config__repo__get_dir() {
-	debug "$LINENO" "[config__repo__get_dir]" "$*"
+	debug "$*"
 	config__create_file_if_not_exist
 	local repo_name="${1:?}"
 
@@ -833,7 +831,7 @@ config__repo__get_dir() {
 }
 
 config__repo__get_originurl() {
-	debug "$LINENO" "[config__repo__get_originurl]" "$*"
+	debug "$*"
 	config__create_file_if_not_exist
 	local repo_name=${1:?}
 
@@ -859,7 +857,7 @@ config__create_file_if_not_exist() {
 #######################
 
 git__add_repo_idempotent() {
-	debug "$LINENO" "[git__add_repo_idempotent]" "$*"
+	debug "$*"
 	local repo_url=${1:?}
 	local repo_name=${2:?}
 	local repo_dir="$(const__get_repo_dir "$repo_name")"
@@ -880,7 +878,7 @@ git__add_repo_idempotent() {
 # return 2 = yes repo
 # Checked by origin.
 git__validate_repo() {
-	debug "$LINENO" "[git__validate_repo]" "$*"
+	debug "$*"
 	local repo_url=${1:?}
 	local repo_name=${2:?}
 	local repo_dir="$(const__get_repo_dir "$repo_name")"
@@ -899,14 +897,14 @@ git__validate_repo() {
 }
 
 git__get_origin() {
-	debug "$LINENO" "[git__get_origin]" "$*"
+	debug "$*"
 	local repo_dir=${1:?}
 
 	git -C "$repo_dir" remote get-url origin 2>/dev/null || true
 }
 
 git__get_repo_name() {
-	debug "$LINENO" "[git__get_repo_name]" "$*"
+	debug "$*"
 	local repo_url=${1:?}
 
 	local name
@@ -921,13 +919,13 @@ git__get_repo_name() {
 }
 
 git__create_workspace_worktree_idempotent() {
-	debug "$LINENO" "[git__create_workspace_worktree_idempotent]" "$*"
+	debug "$*"
 	local source_repo_dir="$1"
 	local destination_worktree_dir="$2"
 	local branch_name="$3"
 
 	if git__check_worktree_exists "$source_repo_dir" "$destination_worktree_dir"; then
-		debug "$LINENO" "[git__create_workspace_worktree_idempotent]" "Git worktree already exists" "$source_repo_dir" to "$destination_worktree_dir"
+		debug "Git worktree already exists" "$source_repo_dir" to "$destination_worktree_dir"
 		return 0;
 	fi
 
@@ -938,12 +936,12 @@ git__create_workspace_worktree_idempotent() {
 }
 
 git__remove_workspace_worktree_idempotent() {
-	debug "$LINENO" "[git__remove_workspace_worktree_idempotent]" "$*"
+	debug "$*"
 	local source_repo_dir="$1"
 	local destination_worktree_dir="$2"
 
 	if ! git__check_worktree_exists "$source_repo_dir" "$destination_worktree_dir"; then
-		debug "$LINENO" "[git__remove_workspace_worktree_idempotent]" "Git worktree does not exist" "$source_repo_dir" to "$destination_worktree_dir"
+		debug "Git worktree does not exist" "$source_repo_dir" to "$destination_worktree_dir"
 		return 0;
 	fi
 
@@ -954,7 +952,7 @@ git__remove_workspace_worktree_idempotent() {
 }
 
 git__check_worktree_exists() {
-	debug "$LINENO" "[git__check_worktree_exists]" "$*"
+	debug "$*"
 	local source_repo_dir="$1"
 	local destination_worktree_dir="$2"
 
@@ -972,7 +970,7 @@ git__check_worktree_exists() {
 
 # Create workspace dir and return the path
 fs__workspace_mkdir_idempotent() {
-	debug "$LINENO" "[fs__workspace_mkdir_idempotent]" "$*"
+	debug "$*"
 	local workspace_name="$1"
 
 	if [[ -z "$workspace_name" ]]; then
@@ -986,7 +984,7 @@ fs__workspace_mkdir_idempotent() {
 }
 
 fs__workspace_get_repo_subtree_dir() {
-	debug "$LINENO" "[fs__workspace_get_repo_subtree_dir]" "$*"
+	debug "$*"
 	local workspace_name="$1"
 	if [[ -z "$workspace_name" ]]; then
 		fatal "Workspace name is empty"
@@ -1000,7 +998,7 @@ fs__workspace_get_repo_subtree_dir() {
 }
 
 fs__workspace_get_dir() {
-	debug "$LINENO" "[fs__workspace_get_dir]" "$*"
+	debug "$*"
     local workspace_name="$1"
 	if [[ -z "$workspace_name" ]]; then
 		fatal "Workspace name is empty"
@@ -1011,7 +1009,7 @@ fs__workspace_get_dir() {
 
 
 fs__safe_rm_rf() {
-	debug "$LINENO" "[fs__safe_rm_rf]" "$*"
+	debug "$*"
 	local target="$1"
 	local allowed_parent="$2"
 
@@ -1039,7 +1037,7 @@ fs__safe_rm_rf() {
 #############################
 
 dependency__assert() {
-	debug "$LINENO" "[dependency__assert]" "$*"
+	debug "$*"
 	local dependency="$1"
 	local error_message=${2:-"$dependency is not installed. Please install $dependency and try again."}
 	if ! command -v "$dependency" &>/dev/null; then
@@ -1048,7 +1046,7 @@ dependency__assert() {
 }
 
 dependency__assert_git() {
-	debug "$LINENO" "[dependency__assert_git]" "$*"
+	debug "$*"
 	if env_is_macos; then
 		dependency__assert "git" $'Git is required on macOS. Please install it with: \n brew install git \n and try again.'
 	else
@@ -1057,7 +1055,7 @@ dependency__assert_git() {
 }
 
 dependency__assert_yq() {
-	debug "$LINENO" "[dependency__assert_yq]" "$*"
+	debug "$*"
 	if env_is_macos; then
 		dependency__assert "yq" $'yq is required on macOS. Please install it with: \n brew install yq \n and try again.'
 	else
@@ -1076,7 +1074,7 @@ const__get_repo_dir() {
 }
 
 env_is_macos() {
-	debug "$LINENO" "[env_is_macos]" "$*"
+	debug "$*"
 	[[ "$(uname)" == "Darwin" ]]
 }
 
@@ -1100,7 +1098,7 @@ validate_name() {
 }
 
 print_table_vertically() {
-	debug "$LINENO" "[print_table_vertically]" "$*"
+	debug "$*"
 	local n_cols=${1:?}
 	shift
 
@@ -1134,7 +1132,7 @@ print_table_vertically() {
 }
 
 print_table_horizontally() {
-	debug "$LINENO" "[print_table_horizontally]" "$*"
+	debug "$*"
 	local n_cols=${1:?}
 	shift
 	local cells=("$@")
