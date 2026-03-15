@@ -744,7 +744,7 @@ workspace__cd() {
 		fatal "Workspace directory $workspace_dir does not exist"
 	fi
 
-	info "Entering $workspace_dir (exit to return)"
+	info "Entering $workspace_dir (exit or Ctrl+D to return)"
     # shell blocks the release lock, so we'll release the lock first here.
 	fs__release_lock
 	cd "$workspace_dir" && "$SHELL"
