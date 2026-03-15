@@ -282,6 +282,7 @@ Sub-commands:
     list                           List all workspaces
     exec <name> <command>          Run a command in each repo of a workspace
     checkout <name> <branch>       Check out a branch across all repos
+    pull <name>                    Pull latest changes for all repos
     cd <name>                      Print the workspace directory path
 "
 
@@ -311,6 +312,10 @@ Sub-commands:
 	"checkout")
 		shift
 		cmd__workspace__checkout "$@"
+		;;
+	"pull")
+		shift
+		cmd__workspace__pull "$@"
 		;;
 	"cd")
 		shift
@@ -491,6 +496,28 @@ Type 'exit' or press Ctrl+D to return to the previous shell.
 	validate_name "$workspace_name" "workspace name"
 
 	workspace__cd "$workspace_name"
+}
+
+cmd__workspace__pull() {
+	local USAGE="
+
+Usage (workspace pull):
+    $SCRIPT_NAME workspace pull <workspace_name>
+    $SCRIPT_NAME pull <workspace_name>
+
+Pulls latest changes for all repos in the workspace.
+"
+
+	local curr_workspace
+	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace); then
+		info "Workspace detected as $curr_workspace"
+		set -- "$curr_workspace" "$@"
+	fi
+
+	local workspace_name="${1:?"Error: workspace name is required.$USAGE"}"
+	validate_name "$workspace_name" "workspace name"
+
+	workspace__pull "$workspace_name"
 }
 
 ####################
@@ -861,6 +888,29 @@ workspace__checkout__branch() {
 		fi
 	done
 
+}
+
+workspace__pull() {
+	debug "$*"
+	workspace__validate_all
+	repo__validate_all
+
+	local workspace_name="$1"
+
+	if ! config__workspace__exists "$workspace_name"; then
+		fatal "Workspace $workspace_name does not exist"
+	fi
+
+	local repos=($(config__workspace__get_repos "$workspace_name"))
+
+	for repo_name in "${repos[@]+"${repos[@]}"}"; do
+		local repo_worktree_dir
+		repo_worktree_dir="$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo_name")"
+		info "Pulling '$repo_name' in workspace '$workspace_name'..."
+		if ! git__pull "$repo_worktree_dir"; then
+			warn "Failed to pull repo $repo_name ($repo_worktree_dir) under workspace $workspace_name"
+		fi
+	done
 }
 
 workspace__validate_all() {
