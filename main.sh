@@ -1703,13 +1703,21 @@ env_is_macos() {
 }
 
 env__get_caller_workspace() {
-	if [[ "$PWD" == $WORKSPACES_DIR/* ]]; then
-		local temp="${PWD#$WORKSPACES_DIR/}"
-		echo "${temp%%/*}"
+	local best_match=""
+	local workspace_name workspace_dir
+	for workspace_name in $(config__workspace__list); do
+		workspace_dir="$(fs__workspace_get_dir "$workspace_name")"
+		if [[ "$PWD" == "$workspace_dir"/* || "$PWD" == "$workspace_dir" ]]; then
+			if [[ ${#workspace_name} -gt ${#best_match} ]]; then
+				best_match="$workspace_name"
+			fi
+		fi
+	done
+	if [[ -n "$best_match" ]]; then
+		echo "$best_match"
 		return 0
-	else
-		return 1
 	fi
+	return 1
 }
 
 validate_name() {
