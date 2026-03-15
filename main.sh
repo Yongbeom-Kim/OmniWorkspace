@@ -507,6 +507,8 @@ Sub-commands:
     add <repo_url> [repo_name]  Register a git repository
     remove <repo_name>          Remove a registered repository
     list                        List all registered repositories
+    pull [repo_name ...]        Pull latest changes for repositories
+    reset-to-origin [repo ...]  Fetch and hard reset to origin's current branch
 "
 
 	debug "$*"
@@ -523,6 +525,14 @@ Sub-commands:
 	"list")
 		shift
 		cmd__repo__list "$@"
+		;;
+	"pull")
+		shift
+		cmd__repo__pull "$@"
+		;;
+	"reset-to-origin")
+		shift
+		cmd__repo__reset_to_origin "$@"
 		;;
 	*)
 		fatal "Error: unknown sub-command '${1:-}'.$USAGE"
@@ -592,6 +602,81 @@ Lists all registered repositories.
 	done
 
 	print_table_horizontally 3 "repo" "origin" "directory" "${cells[@]+"${cells[@]}"}"
+}
+
+cmd__repo__pull() {
+	local USAGE="
+
+Usage (repo pull):
+    $SCRIPT_NAME repo pull [repo_name ...]
+    $SCRIPT_NAME pull [repo_name ...]
+
+Pulls latest changes for the specified repositories.
+If no repositories are specified, pulls all registered repositories.
+"
+
+	debug "$*"
+	repo__validate_all
+
+	local repos_to_pull=()
+	if [[ $# -eq 0 ]]; then
+		repos_to_pull=($(config__repo__list))
+	else
+		repos_to_pull=("$@")
+	fi
+
+	if [[ ${#repos_to_pull[@]} -eq 0 ]]; then
+		warn "No repositories registered."
+		return 0
+	fi
+
+	for repo_name in "${repos_to_pull[@]}"; do
+		local repo_dir
+		repo_dir=$(config__repo__get_dir "$repo_name")
+		if [[ -z "$repo_dir" || ! -d "$repo_dir" ]]; then
+			warn "Repository '$repo_name' not found, skipping."
+			continue
+		fi
+		info "Pulling '$repo_name'..."
+		git__pull "$repo_dir" || true
+	done
+}
+
+cmd__repo__reset_to_origin() {
+	local USAGE="
+
+Usage (repo reset-to-origin):
+    $SCRIPT_NAME repo reset-to-origin [repo_name ...]
+
+Fetches and hard resets each repository to origin's current branch.
+If no repositories are specified, resets all registered repositories.
+"
+
+	debug "$*"
+	repo__validate_all
+
+	local repos=()
+	if [[ $# -eq 0 ]]; then
+		repos=($(config__repo__list))
+	else
+		repos=("$@")
+	fi
+
+	if [[ ${#repos[@]} -eq 0 ]]; then
+		warn "No repositories registered."
+		return 0
+	fi
+
+	for repo_name in "${repos[@]}"; do
+		local repo_dir
+		repo_dir=$(config__repo__get_dir "$repo_name")
+		if [[ -z "$repo_dir" || ! -d "$repo_dir" ]]; then
+			warn "Repository '$repo_name' not found, skipping."
+			continue
+		fi
+		info "Resetting '$repo_name' to origin..."
+		git__reset_to_origin "$repo_dir" || true
+	done
 }
 
 ###########################################
@@ -1281,6 +1366,44 @@ git__checkout_branch_on_worktree() {
 
 	if ! git -C "$destination_worktree_dir" checkout -b "$checkout_branch_name" 2>/dev/null && ! git -C "$destination_worktree_dir" checkout "$checkout_branch_name"; then
 		warn "Failed to checkout branch $checkout_branch_name on $destination_worktree_dir"
+		return 1
+	fi
+}
+
+git__pull() {
+	debug "$*"
+	local repo_dir="$1"
+
+	if ! git -C "$repo_dir" pull; then
+		warn "Failed to pull in $repo_dir"
+		return 1
+	fi
+}
+
+git__get_branch() {
+	debug "$*"
+	local repo_dir="$1"
+	git -C "$repo_dir" rev-parse --abbrev-ref HEAD
+}
+
+git__reset_to_origin() {
+	debug "$*"
+	local repo_dir="$1"
+
+	local branch
+	branch=$(git__get_branch "$repo_dir")
+	if [[ -z "$branch" || "$branch" == "HEAD" ]]; then
+		warn "Could not determine current branch in $repo_dir"
+		return 1
+	fi
+
+	if ! git -C "$repo_dir" fetch origin; then
+		warn "Failed to fetch origin in $repo_dir"
+		return 1
+	fi
+
+	if ! git -C "$repo_dir" reset --hard "origin/$branch"; then
+		warn "Failed to reset to origin/$branch in $repo_dir"
 		return 1
 	fi
 }
