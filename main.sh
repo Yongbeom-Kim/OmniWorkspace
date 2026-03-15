@@ -276,6 +276,7 @@ Usage:
 
 Sub-commands:
     add <name> [repos...]          Create a workspace or add repos to it
+    create <name> [repos...]       Alias for add
     add-repo <name> [repos...]     Alias for add
     remove-repo <name> <repos...>  Remove repos from a workspace
     delete <name>                  Delete a workspace
@@ -289,7 +290,7 @@ Sub-commands:
 	debug "$*"
 
 	case ${1:-} in
-	"add" | "add-repo")
+	"add" | "add-repo" | "create")
 		shift
 		cmd__workspace__add "$@"
 		;;
