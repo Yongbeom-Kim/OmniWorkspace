@@ -1346,7 +1346,7 @@ git__get_origin() {
 	debug "$*"
 	local repo_dir=${1:?}
 
-	git -C "$repo_dir" remote get-url origin 2>/dev/null || true
+	git -C "$repo_dir" remote get-url origin || true
 }
 
 git__get_repo_name() {
@@ -1376,7 +1376,7 @@ git__create_workspace_worktree_idempotent() {
 	fi
 
 	# Try creating with new branch first; if branch already exists, use it directly
-	if ! git -C "$source_repo_dir" worktree add -b "$branch_name" "$destination_worktree_dir" 2>/dev/null; then
+	if ! git -C "$source_repo_dir" worktree add -b "$branch_name" "$destination_worktree_dir"; then
 		git -C "$source_repo_dir" worktree add "$destination_worktree_dir" "$branch_name"
 	fi
 }
@@ -1414,7 +1414,7 @@ git__checkout_branch_on_worktree() {
 	local destination_worktree_dir="$1"
 	local checkout_branch_name="$2"
 
-	if ! git -C "$destination_worktree_dir" checkout -b "$checkout_branch_name" 2>/dev/null && ! git -C "$destination_worktree_dir" checkout "$checkout_branch_name"; then
+	if ! git -C "$destination_worktree_dir" checkout -b "$checkout_branch_name" && ! git -C "$destination_worktree_dir" checkout "$checkout_branch_name"; then
 		warn "Failed to checkout branch $checkout_branch_name on $destination_worktree_dir"
 		return 1
 	fi
