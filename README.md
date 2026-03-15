@@ -94,6 +94,7 @@ ows ws checkout new-branch # Checks out across my-feature
 - **Git worktrees:** Workspaces use worktrees rather than full clones, so they share the git object store and are lightweight.
 - **Idempotent operations:** Commands are safe to re-run — adding an already-existing repo or workspace is a no-op.
 - **Safety:** `rm -rf` operations are guarded to only delete within allowed parent directories under `$HOME`.
+- **Important:** Do not manually check out branches inside workspace repo directories (e.g. via `git checkout`). Use `ows workspace checkout` instead — it keeps the config and all worktrees in sync. Manually switching branches can cause the workspace state to diverge from `config.yaml`.
 
 ## Configuration
 

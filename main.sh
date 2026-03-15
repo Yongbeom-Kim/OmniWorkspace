@@ -284,6 +284,7 @@ Sub-commands:
     exec <name> <command>          Run a command in each repo of a workspace
     checkout <name> <branch>       Check out a branch across all repos
     pull <name>                    Pull latest changes for all repos
+    reset-hard-to-origin <name>    Fetch and hard reset all repos to upstream
     cd <name>                      Print the workspace directory path
 "
 
@@ -317,6 +318,10 @@ Sub-commands:
 	"pull")
 		shift
 		cmd__workspace__pull "$@"
+		;;
+	"reset-hard-to-origin")
+		shift
+		cmd__workspace__reset_hard_to_origin "$@"
 		;;
 	"cd")
 		shift
@@ -519,6 +524,27 @@ Pulls latest changes for all repos in the workspace.
 	validate_name "$workspace_name" "workspace name"
 
 	workspace__pull "$workspace_name"
+}
+
+cmd__workspace__reset_hard_to_origin() {
+	local USAGE="
+
+Usage (workspace reset-hard-to-origin):
+    $SCRIPT_NAME workspace reset-hard-to-origin <workspace_name>
+
+Fetches and hard resets all repos in the workspace to the upstream branch.
+"
+
+	local curr_workspace
+	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace); then
+		info "Workspace detected as $curr_workspace"
+		set -- "$curr_workspace" "$@"
+	fi
+
+	local workspace_name="${1:?"Error: workspace name is required.$USAGE"}"
+	validate_name "$workspace_name" "workspace name"
+
+	workspace__reset_hard_to_origin "$workspace_name"
 }
 
 ####################
@@ -748,6 +774,8 @@ workspace__add() {
 			continue
 		fi
 
+		git__set_upstream_branch "$subtree_dir" "$branch_name" || true
+
 		echo "Successfully added repo $repo to workspace $workspace_name."
 	done
 }
@@ -886,7 +914,9 @@ workspace__checkout__branch() {
 		destination_worktree_dir="$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo_name")"
 		if ! git__checkout_branch_on_worktree "$destination_worktree_dir" "$branch_name"; then
 			warn "Failed to checkout branch $branch_name for repo $repo_name ($destination_worktree_dir) under workspace $workspace_name"
+			continue
 		fi
+		git__set_upstream_branch "$destination_worktree_dir" "$branch_name" || true
 	done
 
 }
@@ -904,12 +934,47 @@ workspace__pull() {
 
 	local repos=($(config__workspace__get_repos "$workspace_name"))
 
+	local branch_name
+	branch_name="$(config__workspace__get_branch "$workspace_name")"
+
 	for repo_name in "${repos[@]+"${repos[@]}"}"; do
 		local repo_worktree_dir
 		repo_worktree_dir="$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo_name")"
+		git__set_upstream_branch "$repo_worktree_dir" "$branch_name" || true
 		info "Pulling '$repo_name' in workspace '$workspace_name'..."
 		if ! git__pull "$repo_worktree_dir"; then
 			warn "Failed to pull repo $repo_name ($repo_worktree_dir) under workspace $workspace_name"
+		fi
+	done
+}
+
+workspace__reset_hard_to_origin() {
+	debug "$*"
+	workspace__validate_all
+	repo__validate_all
+
+	local workspace_name="$1"
+
+	if ! config__workspace__exists "$workspace_name"; then
+		fatal "Workspace $workspace_name does not exist"
+	fi
+
+	local repos=($(config__workspace__get_repos "$workspace_name"))
+
+	local branch_name
+	branch_name="$(config__workspace__get_branch "$workspace_name")"
+
+	for repo_name in "${repos[@]+"${repos[@]}"}"; do
+		local repo_worktree_dir
+		repo_worktree_dir="$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo_name")"
+		info "Resetting '$repo_name' in workspace '$workspace_name' to origin/$branch_name..."
+		git__set_upstream_branch "$repo_worktree_dir" "$branch_name" || true
+		if ! git__fetch_origin "$repo_worktree_dir"; then
+			warn "Failed to fetch origin for $repo_name ($repo_worktree_dir)"
+			continue
+		fi
+		if ! git__reset_hard "$repo_worktree_dir" "origin/$branch_name"; then
+			warn "Failed to reset $repo_name ($repo_worktree_dir) to origin/$branch_name"
 		fi
 	done
 }
@@ -1421,6 +1486,17 @@ git__checkout_branch_on_worktree() {
 	fi
 }
 
+git__set_upstream_branch() {
+	debug "$*"
+	local repo_dir="$1"
+	local branch_name="$2"
+
+	if ! git -C "$repo_dir" branch --set-upstream-to="origin/$branch_name" "$branch_name"; then
+		warn "Failed to set upstream branch origin/$branch_name for $branch_name in $repo_dir"
+		return 1
+	fi
+}
+
 git__pull() {
 	debug "$*"
 	local repo_dir="$1"
@@ -1448,13 +1524,32 @@ git__reset_to_origin() {
 		return 1
 	fi
 
+	if ! git__fetch_origin "$repo_dir"; then
+		return 1
+	fi
+
+	if ! git__reset_hard "$repo_dir" "origin/$branch"; then
+		return 1
+	fi
+}
+
+git__fetch_origin() {
+	debug "$*"
+	local repo_dir="$1"
+
 	if ! git -C "$repo_dir" fetch origin; then
 		warn "Failed to fetch origin in $repo_dir"
 		return 1
 	fi
+}
 
-	if ! git -C "$repo_dir" reset --hard "origin/$branch"; then
-		warn "Failed to reset to origin/$branch in $repo_dir"
+git__reset_hard() {
+	debug "$*"
+	local repo_dir="$1"
+	local ref="$2"
+
+	if ! git -C "$repo_dir" reset --hard "$ref"; then
+		warn "Failed to reset to $ref in $repo_dir"
 		return 1
 	fi
 }
