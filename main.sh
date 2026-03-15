@@ -206,6 +206,11 @@ Commands:
     workspaces (wss)          List all workspaces
     repo (r)                  Manage repositories
     repos (rs)                List all repositories
+
+Shortcuts:
+    exec <name> <command>     Shortcut for 'workspace exec'
+    checkout (co) <name> <b>  Shortcut for 'workspace checkout'
+    cd <name>                 Shortcut for 'workspace cd'
 "
 	fs__acquire_lock
 	trap 'debug "Error on line $LINENO in ${FUNCNAME[0]:-main}"; debug_stack_trace; fs__release_lock' ERR EXIT SIGINT SIGTERM
@@ -237,6 +242,18 @@ Commands:
 		shift
 		cmd__repo "$@"
 		;;
+	"exec")
+		shift
+		cmd__workspace__exec "$@"
+		;;
+	"checkout" | "co")
+		shift
+		cmd__workspace__checkout "$@"
+		;;
+	"cd")
+		shift
+		cmd__workspace__cd "$@"
+		;;
 	*)
 		fatal "Error: unknown command '$cmd'.$USAGE"
 		;;
@@ -265,6 +282,7 @@ Sub-commands:
     list                           List all workspaces
     exec <name> <command>          Run a command in each repo of a workspace
     checkout <name> <branch>       Check out a branch across all repos
+    cd <name>                      Print the workspace directory path
 "
 
 	debug "$*"
@@ -293,6 +311,10 @@ Sub-commands:
 	"checkout")
 		shift
 		cmd__workspace__checkout "$@"
+		;;
+	"cd")
+		shift
+		cmd__workspace__cd "$@"
 		;;
 	*)
 		fatal "Error: unknown sub-command '${1:-}'.$USAGE"
@@ -446,6 +468,29 @@ If the branch does not exist, it is always created. The -b option does nothing, 
 	fi
 
 	workspace__checkout__branch "$workspace_name" "$branch_name"
+}
+
+cmd__workspace__cd() {
+	local USAGE="
+
+Usage (workspace cd):
+    $SCRIPT_NAME workspace cd <workspace_name>
+    $SCRIPT_NAME cd <workspace_name>
+
+Opens a new shell in the workspace directory.
+Type 'exit' or press Ctrl+D to return to the previous shell.
+"
+
+	local curr_workspace
+	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace); then
+		info "Workspace detected as $curr_workspace"
+		set -- "$curr_workspace" "$@"
+	fi
+
+	local workspace_name="${1:?"Error: workspace name is required.$USAGE"}"
+	validate_name "$workspace_name" "workspace name"
+
+	workspace__cd "$workspace_name"
 }
 
 ####################
@@ -679,7 +724,30 @@ workspace__exec() {
 		return 1
 	fi
 
+    # Finished all our tasks. Release lock in case of long-running exec.
+	fs__release_lock
 	cd "$workspace_dir" && "$@"
+}
+
+workspace__cd() {
+	debug "$*"
+	workspace__validate_all
+
+	local workspace_name="${1:?"workspace name is required"}"
+
+	if ! config__workspace__exists "$workspace_name"; then
+		fatal "Workspace $workspace_name does not exist"
+	fi
+
+	local workspace_dir="$WORKSPACES_DIR/$workspace_name"
+	if [[ ! -d "$workspace_dir" ]]; then
+		fatal "Workspace directory $workspace_dir does not exist"
+	fi
+
+	info "Entering $workspace_dir (exit to return)"
+    # shell blocks the release lock, so we'll release the lock first here.
+	fs__release_lock
+	cd "$workspace_dir" && "$SHELL"
 }
 
 workspace__checkout__branch() {
