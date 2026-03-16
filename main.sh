@@ -239,6 +239,9 @@ Shortcuts:
     exec <name> <command>     Shortcut for 'workspace exec'
     checkout (co) <name> <b>  Shortcut for 'workspace checkout'
     cd <name>                 Shortcut for 'workspace cd'
+
+Setup:
+    install                   Install bash completions
 "
 	fs__acquire_lock
 	trap 'debug "Error on line $LINENO in ${FUNCNAME[0]:-main}"; debug_stack_trace; fs__release_lock' ERR EXIT SIGINT SIGTERM
