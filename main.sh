@@ -161,11 +161,13 @@ REPO_DIRECTORY_KEY="dir"
 #   "<workspace_name>": {
 #       "repos": ["<repo_name>", ...]
 #       "branch": "<branch_name>"
+#       "dir": "<workspace directory path>"
 #   }
 # }
 WORKSPACE_KEY="workspaces"
 WORKSPACE_REPOS_KEY="repos"
 WORKSPACE_BRANCH_KEY="branch"
+WORKSPACE_DIRECTORY_KEY="dir"
 
 # Validate that critical directories are absolute paths under $HOME
 for _dir_var in PROJ_DIR REPOS_DIR WORKSPACES_DIR; do
@@ -175,7 +177,6 @@ for _dir_var in PROJ_DIR REPOS_DIR WORKSPACES_DIR; do
 	fi
 done
 unset _dir_var
-
 
 fatal() {
 	echo -e "[FATAL] $*" >&2
@@ -375,6 +376,9 @@ Creates a workspace and/or adds repos to an existing workspace.
 	validate_name "$workspace_name" "workspace name"
 	shift
 	local workspace_repos=("$@")
+	for repo_name in "${workspace_repos[@]}"; do
+		validate_name "$repo_name" "repo name"
+	done
 
 	workspace__add "$workspace_name" "${workspace_repos[@]}"
 }
@@ -672,10 +676,10 @@ Lists all registered repositories.
 
 	for repo in "${repos[@]+"${repos[@]}"}"; do
 		local repo_obj
-		repo_obj=$(config__repo__read "$repo")
+		repo_obj=$(config__repo__get "$repo")
 		cells+=("$repo")
-		cells+=("$(kv__get_value "$repo_obj" "$REPO_ORIGINURL_KEY")")
-		cells+=("$(kv__get_value "$repo_obj" "$REPO_DIRECTORY_KEY")")
+		cells+=("$(config__repo__obj_get_originurl "$repo_obj")")
+		cells+=("$(config__repo__obj_get_directory "$repo_obj")")
 	done
 
 	print_table_horizontally 3 "repo" "origin" "directory" "${cells[@]+"${cells[@]}"}"
@@ -709,8 +713,8 @@ If no repositories are specified, pulls all registered repositories.
 
 	for repo_name in "${repos_to_pull[@]}"; do
 		local repo_obj repo_dir
-		repo_obj=$(config__repo__read "$repo_name")
-		repo_dir=$(kv__get_value "$repo_obj" "$REPO_DIRECTORY_KEY")
+		repo_obj=$(config__repo__get "$repo_name")
+		repo_dir=$(config__repo__obj_get_directory "$repo_obj")
 		if [[ -z "$repo_dir" || ! -d "$repo_dir" ]]; then
 			warn "Repository '$repo_name' not found, skipping."
 			continue
@@ -747,8 +751,8 @@ If no repositories are specified, resets all registered repositories.
 
 	for repo_name in "${repos[@]}"; do
 		local repo_obj repo_dir
-		repo_obj=$(config__repo__read "$repo_name")
-		repo_dir=$(kv__get_value "$repo_obj" "$REPO_DIRECTORY_KEY")
+		repo_obj=$(config__repo__get "$repo_name")
+		repo_dir=$(config__repo__obj_get_directory "$repo_obj")
 		if [[ -z "$repo_dir" || ! -d "$repo_dir" ]]; then
 			warn "Repository '$repo_name' not found, skipping."
 			continue
@@ -771,27 +775,31 @@ workspace__add() {
 	shift
 	local workspace_repos=("$@")
 
-	if ! config__workspace__create_idempotent "$workspace_name"; then
-		warn "Failed to create workspace $workspace_name."
-		return 1
-	fi
-
 	local workspace_dir
 	workspace_dir="$(fs__workspace_get_dir "$workspace_name")"
+
+	local workspace_obj
+	if config__workspace__exists "$workspace_name"; then
+		workspace_obj=$(config__workspace__get "$workspace_name")
+	else
+		workspace_obj=$(config__workspace__obj_create "$workspace_name" "$workspace_dir")
+	fi
+
 	fs__workspace_mkdir_idempotent "$workspace_name"
 
 	for repo in "${workspace_repos[@]+"${workspace_repos[@]}"}"; do
 		if [[ -z $repo ]]; then
 			continue
 		fi
-		if ! config__workspace__add_repo_idempotent "$workspace_name" "$repo"; then
-			warn "Failed to add repo $repo to workspace $workspace_name. Try again later."
+
+		if config__workspace__obj_contains_repo "$workspace_obj" "$repo"; then
+			warn "Repo $repo already in workspace $workspace_name, skipping."
 			continue
 		fi
 
 		local repo_obj repo_dir
-		repo_obj=$(config__repo__read "$repo")
-		repo_dir=$(kv__get_value "$repo_obj" "$REPO_DIRECTORY_KEY")
+		repo_obj=$(config__repo__get "$repo")
+		repo_dir=$(config__repo__obj_get_directory "$repo_obj")
 		local subtree_dir="$workspace_dir/$repo"
 		local branch_name="$workspace_name"
 
@@ -800,20 +808,28 @@ workspace__add() {
 			continue
 		fi
 
+		workspace_obj=$(config__workspace__obj_add_repo "$workspace_obj" "$repo")
 		git__set_upstream_branch "$subtree_dir" "$branch_name" || true
 
 		echo "Successfully added repo $repo to workspace $workspace_name."
 	done
+
+	if ! config__workspace__put "$workspace_name" "$workspace_obj"; then
+		warn "Failed to save workspace $workspace_name config."
+		return 1
+	fi
 }
 
 workspace__delete() {
 	debug "$*"
 	workspace__validate_all
 	local workspace_name="$1"
+	local ws_obj ws_dir
+	ws_obj=$(config__workspace__get "$workspace_name")
+	ws_dir=$(config__workspace__obj_get_directory "$ws_obj")
 
-	local ws_obj
-	ws_obj=$(config__workspace__read "$workspace_name")
-	local repos=($(kv__get_value "$ws_obj" "$WORKSPACE_REPOS_KEY"))
+	local repos=($(config__workspace__obj_get_repos "$ws_obj"))
+	# TODO: ideally we want to only have 1 fs write per operation, but this is OK.
 	workspace__remove_repos "$workspace_name" "${repos[@]+"${repos[@]}"}"
 
 	if ! config__workspace__delete_idempotent "$workspace_name"; then
@@ -821,7 +837,7 @@ workspace__delete() {
 		return 1
 	fi
 
-	fs__safe_rm_rf "$(fs__workspace_get_dir "$workspace_name")" "$WORKSPACES_DIR"
+	fs__safe_rm_rf "$ws_dir" "$WORKSPACES_DIR"
 }
 
 workspace__list() {
@@ -836,9 +852,9 @@ workspace__list() {
 			continue
 		fi
 		local ws_obj
-		ws_obj=$(config__workspace__read "$workspace")
+		ws_obj=$(config__workspace__get "$workspace")
 		local repos
-		repos=($(kv__get_value "$ws_obj" "$WORKSPACE_REPOS_KEY"))
+		repos=($(config__workspace__obj_get_repos "$ws_obj"))
 		local repo_cell=""
 		for i in "${!repos[@]}"; do
 			repo_cell+="${repos[$i]}"
@@ -849,7 +865,7 @@ workspace__list() {
 		repos_column+=("$repo_cell")
 
 		local branch
-		branch="$(kv__get_value "$ws_obj" "$WORKSPACE_BRANCH_KEY")"
+		branch="$(config__workspace__obj_get_branch "$ws_obj")"
 
 		branch_column+=("$branch")
 	done
@@ -861,22 +877,28 @@ workspace__remove_repos() {
 	debug "$*"
 	workspace__validate_all
 	local workspace_name="${1:?"workspace name is required"}"
+	local workspace_obj="$(config__workspace__get "$workspace_name")"
 	shift
 	# we checked this in cmd__workspace__remove_repo, so guaranteed to have value
 	local repos_to_remove=("$@")
 
 	for repo in "${repos_to_remove[@]+"${repos_to_remove[@]}"}"; do
 		local repo_obj repo_dir
-		repo_obj=$(config__repo__read "$repo")
-		repo_dir=$(kv__get_value "$repo_obj" "$REPO_DIRECTORY_KEY")
+		repo_obj=$(config__repo__get "$repo")
+		repo_dir=$(config__repo__obj_get_directory "$repo_obj")
 		local subtree_dir
 		subtree_dir="$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo")"
-		git__remove_workspace_worktree_idempotent "$repo_dir" "$subtree_dir"
-
-		if ! config__workspace__remove_repo_idempotent "$workspace_name" "$repo"; then
-			warn "Failed to remove repo $repo from workspace $workspace_name"
+		if ! git__remove_workspace_worktree_idempotent "$repo_dir" "$subtree_dir"; then
+			warn "Git Worktree: Failed to remove repo $repo from workspace $workspace_name"
+			continue
 		fi
+
+		workspace_obj=$(config__workspace__obj_remove_repo "$workspace_obj" "$repo")
 	done
+
+	if ! config__workspace__put "$workspace_name" "$workspace_obj"; then
+		warn "Config: Failed to save config"
+	fi
 }
 
 workspace__exec() {
@@ -896,7 +918,7 @@ workspace__exec() {
 		return 1
 	fi
 
-    # Finished all our tasks. Release lock in case of long-running exec.
+	# Finished all our tasks. Release lock in case of long-running exec.
 	fs__release_lock
 	cd "$workspace_dir" && "$@"
 }
@@ -917,7 +939,7 @@ workspace__cd() {
 	fi
 
 	info "Entering $workspace_dir (exit or Ctrl+D to return)"
-    # shell blocks the release lock, so we'll release the lock first here.
+	# shell blocks the release lock, so we'll release the lock first here.
 	fs__release_lock
 	cd "$workspace_dir" && "$SHELL"
 }
@@ -931,13 +953,23 @@ workspace__checkout__branch() {
 	local branch_name="$2"
 
 	local ws_obj
-	if ! ws_obj=$(config__workspace__read "$workspace_name"); then
+	if ! config__workspace__exists "$workspace_name"; then
 		fatal "Workspace $workspace_name does not exist"
 	fi
+	ws_obj=$(config__workspace__get "$workspace_name")
 
-	local repos=($(kv__get_value "$ws_obj" "$WORKSPACE_REPOS_KEY"))
+	local repos=($(config__workspace__obj_get_repos "$ws_obj"))
 
-	if ! config__workspace__set_branch_idempotent "$workspace_name" "$branch_name"; then
+	if config__workspace__test_branch_exists "$branch_name"; then
+		local current_branch
+		current_branch=$(config__workspace__obj_get_branch "$ws_obj")
+		if [[ "$current_branch" != "$branch_name" ]]; then
+			fatal "Failed to set branch for workspace $workspace_name: Branch $branch_name already exists in a different workspace."
+		fi
+	fi
+
+	ws_obj=$(config__workspace__obj_set_branch "$ws_obj" "$branch_name")
+	if ! config__workspace__put "$workspace_name" "$ws_obj"; then
 		fatal "Failed to checkout branch $branch_name for workspace $workspace_name"
 	fi
 
@@ -950,7 +982,6 @@ workspace__checkout__branch() {
 		fi
 		git__set_upstream_branch "$destination_worktree_dir" "$branch_name" || true
 	done
-
 }
 
 workspace__pull() {
@@ -961,12 +992,13 @@ workspace__pull() {
 	local workspace_name="$1"
 
 	local ws_obj
-	if ! ws_obj=$(config__workspace__read "$workspace_name"); then
+	if ! config__workspace__exists "$workspace_name"; then
 		fatal "Workspace $workspace_name does not exist"
 	fi
+	ws_obj=$(config__workspace__get "$workspace_name")
 
-	local repos=($(kv__get_value "$ws_obj" "$WORKSPACE_REPOS_KEY"))
-	local branch_name="$(kv__get_value "$ws_obj" "$WORKSPACE_BRANCH_KEY")"
+	local repos=($(config__workspace__obj_get_repos "$ws_obj"))
+	local branch_name="$(config__workspace__obj_get_branch "$ws_obj")"
 
 	for repo_name in "${repos[@]+"${repos[@]}"}"; do
 		local repo_worktree_dir
@@ -987,10 +1019,13 @@ workspace__reset_hard_to_origin() {
 	local workspace_name="$1"
 
 	local ws_obj
-	ws_obj=$(config__workspace__read "$workspace_name") || fatal "Workspace $workspace_name does not exist"
+	if ! config__workspace__exists "$workspace_name"; then
+		fatal "Workspace $workspace_name does not exist"
+	fi
+	ws_obj=$(config__workspace__get "$workspace_name")
 
-	local repos=($(kv__get_value "$ws_obj" "$WORKSPACE_REPOS_KEY"))
-	local branch_name="$(kv__get_value "$ws_obj" "$WORKSPACE_BRANCH_KEY")"
+	local repos=($(config__workspace__obj_get_repos "$ws_obj"))
+	local branch_name="$(config__workspace__obj_get_branch "$ws_obj")"
 
 	for repo_name in "${repos[@]+"${repos[@]}"}"; do
 		local repo_worktree_dir
@@ -1027,8 +1062,8 @@ workspace__validate() {
 	local workspace_dir
 	workspace_dir="$(fs__workspace_get_dir "$workspace_name")"
 	local ws_obj
-	ws_obj=$(config__workspace__read "$workspace_name") || return 1
-	local repos=($(kv__get_value "$ws_obj" "$WORKSPACE_REPOS_KEY"))
+	ws_obj=$(config__workspace__get "$workspace_name") || return 1
+	local repos=($(config__workspace__obj_get_repos "$ws_obj"))
 
 	fs__workspace_mkdir_idempotent "$workspace_name"
 
@@ -1038,8 +1073,8 @@ workspace__validate() {
 		fi
 
 		local repo_obj repo_dir
-		repo_obj=$(config__repo__read "$repo")
-		repo_dir=$(kv__get_value "$repo_obj" "$REPO_DIRECTORY_KEY")
+		repo_obj=$(config__repo__get "$repo")
+		repo_dir=$(config__repo__obj_get_directory "$repo_obj")
 		local subtree_dir
 		subtree_dir=$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo")
 		local branch_name="$workspace_name"
@@ -1077,10 +1112,10 @@ repo__validate__restore_from_config() {
 	debug "$*"
 	local repo_name="$1"
 	local repo_obj repo_originurl repo_dir
-	repo_obj=$(config__repo__read "$repo_name")
-	repo_originurl=$(kv__get_value "$repo_obj" "$REPO_ORIGINURL_KEY")
-	repo_dir=$(kv__get_value "$repo_obj" "$REPO_DIRECTORY_KEY")
-    
+	repo_obj=$(config__repo__get "$repo_name")
+	repo_originurl=$(config__repo__obj_get_originurl "$repo_obj")
+	repo_dir=$(config__repo__obj_get_directory "$repo_obj")
+
 	# 1. Try to reconstruct variables
 	if [[ -z "$repo_dir" ]]; then
 		repo_dir="$REPOS_DIR/$repo_name"
@@ -1108,9 +1143,9 @@ repo__add() {
 
 	# Check if repo already exists with the same config — skip if so
 	local existing_obj existing_url existing_dir
-	existing_obj=$(config__repo__read "$repo_name")
-	existing_url=$(kv__get_value "$existing_obj" "$REPO_ORIGINURL_KEY")
-	existing_dir=$(kv__get_value "$existing_obj" "$REPO_DIRECTORY_KEY")
+	existing_obj=$(config__repo__get "$repo_name")
+	existing_url=$(config__repo__obj_get_originurl "$existing_obj")
+	existing_dir=$(config__repo__obj_get_directory "$existing_obj")
 	if [[ "$existing_url" == "$repo_url" && "$existing_dir" == "$repo_dir" ]]; then
 		if git__validate_repo "$repo_url" "$repo_name"; then
 			debug "Repository $repo_name already exists with same config, skipping"
@@ -1120,14 +1155,14 @@ repo__add() {
 
 	# Configs are always the source of truth, so we always add to config first.
 	local repo_obj
-	repo_obj=$(kv__create "$REPO_ORIGINURL_KEY" "$repo_url" "$REPO_DIRECTORY_KEY" "$repo_dir")
-	if ! config__repo__set "$repo_name" "$repo_obj"; then
+	repo_obj=$(config__repo__obj_create "$repo_url" "$repo_dir")
+	if ! config__repo__put "$repo_name" "$repo_obj"; then
 		warn "Failed to add repository $repo_name to config."
 		return 1
 	fi
 
 	if ! repo_dir=$(git__add_repo_idempotent "$repo_url" "$repo_name"); then
-		config__repo__remove_idempotent "$repo_name"
+		config__repo__delete_idempotent "$repo_name"
 		warn "Failed to add repository $repo_name. Parameters: $repo_url, $repo_name"
 		return 1
 	fi
@@ -1150,7 +1185,7 @@ repo__remove() {
 	fi
 
 	# Remove from config (idempotent — OK if already absent)
-	config__repo__remove_idempotent "$repo_name"
+	config__repo__delete_idempotent "$repo_name"
 
 	echo "Repository $repo_name removed successfully."
 }
@@ -1163,7 +1198,7 @@ repo__remove() {
 ### Yaml Workspace Config ###
 #############################
 
-config__workspace__read() {
+config__workspace__get() {
 	debug "$*"
 	config__create_file_if_not_exist
 	local workspace_name="${1:?}"
@@ -1175,124 +1210,34 @@ config__workspace__read() {
 		return 1
 	fi
 
-	# repos (array -> multiple kv lines)
-	local repos_raw
-	repos_raw=$(echo "$result" | yq ".${WORKSPACE_REPOS_KEY}[]" 2>/dev/null) || true
-	if [[ -n "$repos_raw" && "$repos_raw" != "null" ]]; then
-		while read -r repo; do
-			echo "${WORKSPACE_REPOS_KEY}=${repo}"
-		done <<< "$repos_raw"
-	fi
-
-	# branch (scalar)
+	# Default branch name = workspace name
 	local branch
-	branch=$(echo "$result" | yq ".${WORKSPACE_BRANCH_KEY}")
-	if [[ -n "$branch" && "$branch" != "null" ]]; then
-		echo "${WORKSPACE_BRANCH_KEY}=${branch}"
-	else
-		# Default branch is the workspace name
-		echo "${WORKSPACE_BRANCH_KEY}=${workspace_name}"
+	branch=$(echo "$result" | yq -r ".[\"${WORKSPACE_BRANCH_KEY}\"]")
+	if [[ -z "$branch" || "$branch" == "null" ]]; then
+		result=$(echo "$result" | yq -r ".[\"${WORKSPACE_BRANCH_KEY}\"] = \"${workspace_name}\"")
 	fi
+
+	echo "$result"
 }
 
-config__workspace__create_idempotent() {
+config__workspace__put() {
 	debug "$*"
 	config__create_file_if_not_exist
 
-	local workspace_name="$1"
+	local workspace_name="${1:?}" workspace_obj="${2:?}"
 
-	if config__workspace__exists "$workspace_name"; then
-		warn "Creating workspace $workspace_name: already exists"
-		# Idempotent, so OK to return 0
-		return 0
-	fi
-
-	if ! yq -i ".workspaces.[\"${workspace_name}\"].repos = []" "$CONFIG_FILE_PATH"; then
-		warn "Failed to create new workspace ${workspace_name}"
-		return 1
-	fi
-}
-
-config__workspace__delete_idempotent() {
-	debug "$*"
-	config__create_file_if_not_exist
-
-	local workspace_name="$1"
-
-	if ! config__workspace__exists "$workspace_name"; then
-		warn "Deleting workspace $workspace_name: already absent"
-		return 0
-	fi
-
-	yq -i "del(.workspaces.[\"${workspace_name}\"])" "$CONFIG_FILE_PATH"
-}
-
-config__workspace__add_repo_idempotent() {
-	debug "$*"
-	config__create_file_if_not_exist
-	local workspace_name="$1"
-	local repo_name="$2"
-
-	if config__workspace__has_repo "$workspace_name" "$repo_name"; then
-		warn "Adding repo $repo_name to workspace $workspace_name: already exists"
-		return 0
-	fi
-
-	yq -i ".workspaces.[\"${workspace_name}\"].repos += [\"$repo_name\"]" "$CONFIG_FILE_PATH"
-}
-
-config__workspace__remove_repo_idempotent() {
-	debug "$*"
-	config__create_file_if_not_exist
-	local workspace_name="$1"
-	local repo_name="$2"
-
-	if ! config__workspace__has_repo "$workspace_name" "$repo_name"; then
-		warn "Removing repo $repo_name from workspace $workspace_name: does not exist"
-		return 0
-	fi
-
-	yq -i "del(.workspaces.[\"${workspace_name}\"].repos[] | select(. == \"$repo_name\"))" "$CONFIG_FILE_PATH"
+	workspace_obj="$workspace_obj" yq -i ".[\"${WORKSPACE_KEY}\"].[\"${workspace_name}\"] = env(workspace_obj)" "$CONFIG_FILE_PATH"
 }
 
 config__workspace__exists() {
 	debug "$*"
 	config__create_file_if_not_exist
-	local workspace_name="$1"
-	yq -e ".workspaces.[\"${workspace_name}\"]" "$CONFIG_FILE_PATH" &>/dev/null
-}
-
-config__workspace__has_repo() {
-	debug "$*"
-	config__create_file_if_not_exist
-
-	local workspace_name="$1"
-	local repo_name="$2"
-
-	if [[ -n $(yq ".workspaces.[\"${workspace_name}\"].repos[] | select(. == \"$repo_name\")" "$CONFIG_FILE_PATH") ]]; then
-		return 0
-	else
-		return 1
-	fi
-}
-
-config__workspace__set_branch_idempotent() {
-	debug "$*"
-	config__create_file_if_not_exist
-
 	local workspace_name="${1:?}"
-	local branch_name="${2:?}"
 
-	local ws_obj
-	ws_obj=$(config__workspace__read "$workspace_name") || return 1
-	if config__test_workspace_branch_exists "$branch_name" && [[ "$(kv__get_value "$ws_obj" "$WORKSPACE_BRANCH_KEY")" != "$branch_name" ]]; then
-		fatal "Failed to set branch for workspace $workspace_name: Branch $branch_name already exists in a different workspace."
-	fi
-
-	yq -i ".workspaces.[\"${workspace_name}\"].branch = \"$branch_name\"" "$CONFIG_FILE_PATH"
+	yq -e ".[\"${WORKSPACE_KEY}\"].[\"${workspace_name}\"] != null" "$CONFIG_FILE_PATH" &>/dev/null
 }
 
-config__test_workspace_branch_exists() {
+config__workspace__test_branch_exists() {
 	debug "$*"
 	config__create_file_if_not_exist
 
@@ -1305,8 +1250,8 @@ config__test_workspace_branch_exists() {
 			continue
 		fi
 		local ws_obj current_branch
-		ws_obj=$(config__workspace__read "$workspace_name") || continue
-		current_branch="$(kv__get_value "$ws_obj" "$WORKSPACE_BRANCH_KEY")"
+		ws_obj=$(config__workspace__get "$workspace_name") || continue
+		current_branch="$(config__workspace__obj_get_branch "$ws_obj")"
 		if [[ "$current_branch" == "$branch_name" ]]; then
 			debug "Found branch $branch_name"
 			return 0
@@ -1322,36 +1267,108 @@ config__workspace__list() {
 	config__create_file_if_not_exist
 
 	local result
-	result=$(yq '.workspaces | keys | .[]' "$CONFIG_FILE_PATH" 2>/dev/null) || true
+	result=$(yq ".[\"${WORKSPACE_KEY}\"] | keys | .[]" "$CONFIG_FILE_PATH" 2>/dev/null) || true
 
 	if [[ -n "$result" && "$result" != "null" ]]; then
 		echo "$result"
 	fi
 }
 
+config__workspace__delete_idempotent() {
+	debug "$*"
+	config__create_file_if_not_exist
+	local workspace_name="${1:?}"
+
+	yq -i "del(.[\"${WORKSPACE_KEY}\"].[\"${workspace_name}\"])" "$CONFIG_FILE_PATH"
+}
+
+config__workspace__obj_create() {
+	debug "$*"
+	local workspace_name="${1:?}" workspace_dir="${2:?}"
+
+	echo "{
+		\"${WORKSPACE_REPOS_KEY}\": [],
+		\"${WORKSPACE_BRANCH_KEY}\": \"${workspace_name}\",
+		\"${WORKSPACE_DIRECTORY_KEY}\": \"${workspace_dir}\"
+	}" | yq '.'
+}
+
+config__workspace__obj_add_repo() {
+	debug "$*"
+	local workspace_obj="${1:?}" repo_to_add="${2:?}"
+
+	echo "$workspace_obj" | yq -r ".[\"${WORKSPACE_REPOS_KEY}\"] += [\"${repo_to_add}\"]"
+}
+
+config__workspace__obj_remove_repo() {
+	debug "$*"
+	local workspace_obj="${1:?}" repo_to_remove="${2:?}"
+
+	echo "$workspace_obj" | yq -r "del(.[\"${WORKSPACE_REPOS_KEY}\"][] | select(. == \"${repo_to_remove}\"))"
+}
+
+config__workspace__obj_contains_repo() {
+	debug "$*"
+	local workspace_obj="${1:?}" repo="${2:?}"
+
+	echo "$workspace_obj" | yq -e ".[\"${WORKSPACE_REPOS_KEY}\"] | contains([\"${repo}\"])" >/dev/null
+}
+
+config__workspace__obj_get_repos() {
+	debug "$*"
+	local workspace_obj="${1:?}"
+
+	echo "$workspace_obj" | yq -r ".[\"${WORKSPACE_REPOS_KEY}\"].[]" | yq__normalize_null
+}
+
+config__workspace__obj_get_branch() {
+	debug "$*"
+	local workspace_obj="${1:?}"
+
+	echo "$workspace_obj" | yq -r ".[\"${WORKSPACE_BRANCH_KEY}\"]" | yq__normalize_null
+}
+
+config__workspace__obj_set_branch() {
+	debug "$*"
+	local workspace_obj="${1:?}" branch="${2:?}"
+
+	echo "$workspace_obj" | yq -r ".[\"${WORKSPACE_BRANCH_KEY}\"] = \"$branch\""
+}
+
+config__workspace__obj_get_directory() {
+	debug "$*"
+	local workspace_obj="${1:?}"
+
+	echo "$workspace_obj" | yq -r ".[\"${WORKSPACE_DIRECTORY_KEY}\"]" | yq__normalize_null
+}
+
+config__workspace__obj_set_directory() {
+	debug "$*"
+	local workspace_obj="${1:?}" dir="${2:?}"
+
+	echo "$workspace_obj" | yq -r ".[\"${WORKSPACE_DIRECTORY_KEY}\"] = \"$dir\""
+}
+
 ########################
 ### Yaml Repo Config ###
 ########################
 
-config__repo__set() {
+config__repo__put() {
 	debug "$*"
 	config__create_file_if_not_exist
 
 	local repo_name="${1:?}"
 	local repo_obj="${2:?}"
-	local repo_originurl repo_dir
-	repo_originurl="$(kv__get_value "$repo_obj" "$REPO_ORIGINURL_KEY")"
-	repo_dir="$(kv__get_value "$repo_obj" "$REPO_DIRECTORY_KEY")"
 
-	yq -i ".repos.[\"${repo_name}\"] = {\"origin_url\": \"$repo_originurl\", \"dir\": \"$repo_dir\"}" "$CONFIG_FILE_PATH"
+	repo_obj="$repo_obj" yq -i ".[\"${REPO_KEY}\"].[\"${repo_name}\"] = env(repo_obj)" "$CONFIG_FILE_PATH"
 }
 
-config__repo__remove_idempotent() {
+config__repo__delete_idempotent() {
 	debug "$*"
 	config__create_file_if_not_exist
 	local repo_name=${1:?}
 
-	yq -i "del(.repos.[\"${repo_name}\"])" "$CONFIG_FILE_PATH"
+	yq -i "del(.[\"${REPO_KEY}\"].[\"${repo_name}\"])" "$CONFIG_FILE_PATH"
 }
 
 config__repo__list() {
@@ -1359,14 +1376,14 @@ config__repo__list() {
 	config__create_file_if_not_exist
 
 	local result
-	result=$(yq '.repos | keys | .[]' "$CONFIG_FILE_PATH" 2>/dev/null) || true
+	result=$(yq ".[\"${REPO_KEY}\"] | keys | .[]" "$CONFIG_FILE_PATH" 2>/dev/null) || true
 
 	if [[ -n "$result" && "$result" != "null" ]]; then
 		echo "$result"
 	fi
 }
 
-config__repo__read() {
+config__repo__get() {
 	debug "$*"
 	config__create_file_if_not_exist
 	local repo_name="${1:?}"
@@ -1377,21 +1394,45 @@ config__repo__read() {
 	if [[ "$result" == "null" ]]; then
 		return 1
 	fi
-
-	local origin_url dir
-	origin_url=$(echo "$result" | yq ".[\"${REPO_ORIGINURL_KEY}\"]")
-	if [[ "$origin_url" == "null" ]]; then
-		origin_url=""
-	fi
-
-	dir=$(echo "$result" | yq ".[\"${REPO_DIRECTORY_KEY}\"]")
-	if [[ "$dir" == "null" ]]; then
-		dir=""
-	fi
-
-	kv__create "$REPO_ORIGINURL_KEY" "$origin_url" "$REPO_DIRECTORY_KEY" "$dir"
+	echo "$result"
 }
 
+config__repo__obj_create() {
+	local repo_originurl="${1:?}" repo_dir="${2:?}"
+
+	echo "{
+        \"$REPO_ORIGINURL_KEY\": \"$repo_originurl\",
+        \"$REPO_DIRECTORY_KEY\": \"$repo_dir\"
+    }" | yq '.'
+}
+
+config__repo__obj_set_directory() {
+	debug "$*"
+	local repo_obj="${1:?}" value="${2:?}"
+
+	echo "$repo_obj" | yq ".[\"$REPO_DIRECTORY_KEY\"] = \"$value\""
+}
+
+config__repo__obj_get_directory() {
+	debug "$*"
+	local repo_obj="${1:?}"
+
+	echo "$repo_obj" | yq -r ".[\"$REPO_DIRECTORY_KEY\"]" | yq__normalize_null
+}
+
+config__repo__obj_set_originurl() {
+	debug "$*"
+	local repo_obj="${1:?}" value="${2:?}"
+
+	echo "$repo_obj" | yq ".[\"$REPO_ORIGINURL_KEY\"] = \"$value\""
+}
+
+config__repo__obj_get_originurl() {
+	debug "$*"
+	local repo_obj="${1:?}"
+
+	echo "$repo_obj" | yq -r ".[\"$REPO_ORIGINURL_KEY\"]" | yq__normalize_null
+}
 
 config__create_file_if_not_exist() {
 	if [[ ! -f "$CONFIG_FILE_PATH" ]]; then
@@ -1662,7 +1703,7 @@ fs__acquire_lock() {
 	fi
 
 	# Record our PID so other instances can detect stale locks
-	echo $$ > "$CONFIG_FILE_LOCK_DIR_PATH/pid"
+	echo $$ >"$CONFIG_FILE_LOCK_DIR_PATH/pid"
 }
 
 fs__release_lock() {
@@ -1671,7 +1712,6 @@ fs__release_lock() {
 		rmdir "$CONFIG_FILE_LOCK_DIR_PATH"
 	fi
 }
-
 
 fs__safe_rm_rf() {
 	debug "$*"
@@ -1731,31 +1771,17 @@ dependency__assert_yq() {
 ##### Utils #####
 #################
 
-kv__get_value() {
-	debug "$*"
-	local obj=${1:?} key=${2:?}
-	local line
-	while read -r line; do
-		if [[ "$line" == "$key="* ]]; then
-			# no return, multiple value (array) = multiple kv pair.
-			echo "${line#*=}"
-		fi
-	done <<< "$obj"
-}
-
-kv__create() {
-	debug "$*"
-	local args=("$@")
-	local n_args=$#
-
-	if [[ $((n_args % 2)) -eq 1 ]]; then
-		warn "Odd number of arguments passed to kv__create. N_args: $n_args, args: $args"
-		return 1
+# Normalize yq "null" output to empty string.
+# yq -r returns the literal string "null" for missing/null fields.
+# Usage: echo "$obj" | yq -r '.field' | yq__normalize_null
+yq__normalize_null() {
+	local value
+	value=$(cat)
+	if [[ "$value" == "null" ]]; then
+		echo ""
+	else
+		echo "$value"
 	fi
-
-	for (( i=0; i<$((n_args / 2)); i++ )); do
-		printf "%s=%s\n" "${args[$((2*i))]}" "${args[$((2*i + 1))]}"
-	done
 }
 
 const__get_repo_dir() {
