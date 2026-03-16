@@ -137,7 +137,9 @@ else
 	ERASE_SCREEN_START=''
 fi
 
-## Project Variables ##
+#########################
+### Project Variables ###
+#########################
 
 SCRIPT_NAME=$(basename "$0")
 PROJ_DIR="${PROJ_DIR:-$HOME/.ows}"
@@ -146,7 +148,10 @@ WORKSPACES_DIR="${WORKSPACES_DIR:-$PROJ_DIR/workspaces}"
 CONFIG_FILE_PATH="$PROJ_DIR/config.yaml"
 CONFIG_FILE_LOCK_DIR_PATH="$PROJ_DIR/config.lock" # mkdir as lock
 
-# Object definition
+##########################
+### Object definitions ###
+##########################
+
 # repos: {
 #   "<repo_name>": {
 #       "origin_url": "<origin URL>"
@@ -784,6 +789,7 @@ If no repositories are specified, resets all registered repositories.
 cmd__completions__install() {
 	mkdir -p "$HOME/.bash_completions"
 	rm -f "$HOME/.bash_completions/$SCRIPT_NAME.bash"
+
 	# NOTE: requires SCRIPT_NAME to be on $PATH
 	cp "$(command -v "$SCRIPT_NAME")" "$HOME/.bash_completions/$SCRIPT_NAME.bash"
 	# NOTE: the sourced copy includes top-level code (variable assignments, validation).
@@ -1977,6 +1983,7 @@ print_table_horizontally() {
 	debug "$*"
 	local n_cols=${1:?}
 	shift
+
 	local cells=("$@")
 	local n_rows=$((${#cells[@]} / $n_cols))
 	local leftover_cells=$((${#cells[@]} % $n_cols))
