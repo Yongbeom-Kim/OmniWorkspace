@@ -169,10 +169,12 @@ WORKSPACE_REPOS_KEY="repos"
 WORKSPACE_BRANCH_KEY="branch"
 WORKSPACE_DIRECTORY_KEY="dir"
 
+# TODO: may cause crash when sourcing in zshrc or bashrc, but it is OK for now.
 # Validate that critical directories are absolute paths under $HOME
-for _dir_var in PROJ_DIR REPOS_DIR WORKSPACES_DIR; do
-	if [[ "${!_dir_var}" != "$HOME"/* ]]; then
-		echo "[FATAL] $_dir_var must be under \$HOME ($HOME), got '${!_dir_var}'" >&2
+CRITICAL_DIRS=("$PROJ_DIR" "$REPOS_DIR" "$WORKSPACES_DIR")
+for _dir_var in "${CRITICAL_DIRS[@]}"; do
+	if [[ "${_dir_var}" != "$HOME"/* ]]; then
+		echo "[FATAL] $_dir_var must be under \$HOME ($HOME), got '${_dir_var}'" >&2
 		exit 1
 	fi
 done
@@ -216,6 +218,10 @@ debug_stack_trace() {
 		echo "  [$i] ${FUNCNAME[$i]}() ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}" >&2
 	done
 }
+
+#######################
+##### ENTRY POINT #####
+#######################
 
 main() {
 	local USAGE="
@@ -276,6 +282,10 @@ Shortcuts:
 		shift
 		cmd__workspace__cd "$@"
 		;;
+	"install")
+		shift
+		cmd__completions__install "$@"
+		;;
 	*)
 		fatal "Error: unknown command '$cmd'.$USAGE"
 		;;
@@ -290,6 +300,7 @@ Shortcuts:
 ### Workspaces ###
 ####################
 
+# Completions in completion__bash_workspace
 cmd__workspace() {
 	local USAGE="
 
@@ -576,6 +587,7 @@ Fetches and hard resets all repos in the workspace to the upstream branch.
 ### Repositories ###
 ####################
 
+# Completions in completion__bash_repo
 cmd__repo() {
 	local USAGE="
 
@@ -760,6 +772,110 @@ If no repositories are specified, resets all registered repositories.
 		info "Resetting '$repo_name' to origin..."
 		git__reset_to_origin "$repo_dir" || true
 	done
+}
+
+###########################
+##### BASH COMPLETION #####
+###########################
+
+cmd__completions__install() {
+	mkdir -p "$HOME/.bash_completions"
+	rm -f "$HOME/.bash_completions/$SCRIPT_NAME.bash"
+	# NOTE: requires SCRIPT_NAME to be on $PATH
+	cp "$(command -v "$SCRIPT_NAME")" "$HOME/.bash_completions/$SCRIPT_NAME.bash"
+	# NOTE: the sourced copy includes top-level code (variable assignments, validation).
+	# This is acceptable for now; validation won't fire in normal setups.
+	# remove set -euo pipefail when sourcing in bash
+	perl -i -ne 'print unless /^set -euo pipefail$/' "$HOME/.bash_completions/$SCRIPT_NAME.bash"
+	# remove and replace main "$@" with complete -F completion__bash SCRIPT_NAME
+	perl -i -pe "s/^main \"\\\$\@\"$/complete -F completion__bash \"$SCRIPT_NAME\"/" "$HOME/.bash_completions/$SCRIPT_NAME.bash"
+
+	# Only append to ~/.bashrc if the sourcing block is not already present
+	if [[ -f ~/.bashrc ]]; then
+		if ! grep -qF 'for f in ~/.bash_completions/*.bash; do' ~/.bashrc; then
+			cat >>~/.bashrc <<'EOF'
+for f in ~/.bash_completions/*.bash; do
+    source "$f"
+done
+EOF
+		fi
+	fi
+
+	# Only append to ~/.zshrc if the sourcing block is not already present
+	# TODO: add zsh-native completions (compdef); bash compat works via zsh's built-in bashcompinit
+	if [[ -f ~/.zshrc ]]; then
+		if ! grep -qF 'for f in ~/.bash_completions/*.bash; do' ~/.zshrc; then
+			cat >>~/.zshrc <<'EOF'
+for f in ~/.bash_completions/*.bash; do
+    source "$f"
+done
+EOF
+		fi
+	fi
+}
+
+completion__bash() {
+	local cur="${COMP_WORDS[COMP_CWORD]}"
+	local cmds
+
+	if [[ $COMP_CWORD -eq 1 ]]; then
+		cmds=("workspaces" "wss" "workspace" "ws" "w" "wsp" "repos" "rs" "repo" "r" "exec" "checkout" "co" "cd" "install")
+		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+		return 0
+	fi
+
+	case "${COMP_WORDS[1]}" in
+	"workspace" | "ws" | "w" | "wsp" | "exec" | "checkout" | "co" | "cd")
+		completion__bash_workspace
+		;;
+	"repo" | "r")
+		completion__bash_repo
+		;;
+	esac
+}
+
+completion__bash_workspace() {
+	local cmds=()
+	if [[ $COMP_CWORD -eq 2 ]]; then
+		cmds=($(config__workspace__list))
+		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+		return 0
+	fi
+
+	local subcmd="${COMP_WORDS[2]}"
+	case "$subcmd" in
+	"delete" | "list" | "exec" | "checkout" | "pull" | "reset-hard-to-origin" | "cd")
+		# no further autocompletions
+		return 0
+		;;
+	"add" | "add-repo" | "create" | "remove-repo")
+		cmds=($(config__repo__list))
+		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+		return 0
+		;;
+	esac
+}
+
+completion__bash_repo() {
+	local cmds=()
+	if [[ $COMP_CWORD -eq 2 ]]; then
+		cmds=("add" "remove" "list" "pull" "reset-to-origin")
+		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+		return 0
+	fi
+
+	local subcmd="${COMP_WORDS[2]}"
+	case "$subcmd" in
+	"add" | "list")
+		# no further autocompletions
+		return 0
+		;;
+	"remove" | "pull" | "reset-to-origin")
+		cmds=($(config__repo__list))
+		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+		return 0
+		;;
+	esac
 }
 
 ###########################################
