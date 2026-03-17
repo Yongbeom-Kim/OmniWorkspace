@@ -338,6 +338,7 @@ Sub-commands:
     checkout <name> <branch>       Check out a branch across all repos
     pull <name>                    Pull latest changes for all repos
     reset-hard-to-origin <name>    Fetch and hard reset all repos to upstream
+    run-hooks <name>               Run post-copy hooks for all repos
     cd <name>                      Print the workspace directory path
 "
 
@@ -375,6 +376,10 @@ Sub-commands:
 	"reset-hard-to-origin")
 		shift
 		cmd__workspace__reset_hard_to_origin "$@"
+		;;
+	"run-hooks")
+		shift
+		cmd__workspace__run_hooks "$@"
 		;;
 	"cd")
 		shift
@@ -601,6 +606,27 @@ Fetches and hard resets all repos in the workspace to the upstream branch.
 	validate_name "$workspace_name" "workspace name"
 
 	workspace__reset_hard_to_origin "$workspace_name"
+}
+
+cmd__workspace__run_hooks() {
+	local USAGE="
+
+Usage (workspace run-hooks):
+    $SCRIPT_NAME workspace run-hooks <workspace_name>
+
+Runs the post-copy hook for each repo in the workspace that has one configured.
+"
+
+	local curr_workspace
+	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace); then
+		info "Workspace detected as $curr_workspace"
+		set -- "$curr_workspace" "$@"
+	fi
+
+	local workspace_name="${1:?"Error: workspace name is required.$USAGE"}"
+	validate_name "$workspace_name" "workspace name"
+
+	workspace__run_hooks "$workspace_name"
 }
 
 ####################
@@ -921,7 +947,7 @@ completion__bash_workspace() {
 
 	# Position 2: subcommand
 	if [[ $COMP_CWORD -eq 2 ]]; then
-		cmds=("add" "create" "add-repo" "remove-repo" "delete" "list" "exec" "checkout" "pull" "reset-hard-to-origin" "cd")
+		cmds=("add" "create" "add-repo" "remove-repo" "delete" "list" "exec" "checkout" "pull" "reset-hard-to-origin" "run-hooks" "cd")
 		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
 		return 0
 	fi
@@ -1265,6 +1291,40 @@ workspace__reset_hard_to_origin() {
 		fi
 		if ! git__reset_hard "$repo_worktree_dir" "origin/$branch_name"; then
 			warn "Failed to reset $repo_name ($repo_worktree_dir) to origin/$branch_name"
+		fi
+	done
+}
+
+workspace__run_hooks() {
+	debug "$*"
+	workspace__validate_all
+	repo__validate_all
+
+	local workspace_name="$1"
+
+	local ws_obj
+	if ! config__workspace__exists "$workspace_name"; then
+		fatal "Workspace $workspace_name does not exist"
+	fi
+	ws_obj=$(config__workspace__get "$workspace_name")
+
+	local repos=($(config__workspace__obj_get_repos "$ws_obj"))
+
+	for repo_name in "${repos[@]+"${repos[@]}"}"; do
+		local repo_obj repo_post_copy_hook
+		repo_obj=$(config__repo__get "$repo_name")
+		repo_post_copy_hook="$(config__repo__obj_get_post_copy_hook "$repo_obj")"
+
+		if [[ -z "$repo_post_copy_hook" ]]; then
+			info "No post-copy hook for '$repo_name', skipping."
+			continue
+		fi
+
+		local repo_worktree_dir
+		repo_worktree_dir="$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo_name")"
+		info "Running post-copy hook for '$repo_name' in workspace '$workspace_name'..."
+		if ! sh__run_bash_script_in_dir "$repo_worktree_dir" "$repo_post_copy_hook"; then
+			warn "Failed to execute post-copy hook for $repo_name in $repo_worktree_dir"
 		fi
 	done
 }
