@@ -1774,14 +1774,14 @@ config__repo__obj_set_post_copy_hook() {
 	debug "$*"
 	local repo_obj="${1:?}" value="${2:?}"
 
-	echo "$repo_obj" | value="${value}" yq ".[\"$REPO_POST_COPY_HOOK_KEY\"] = env(value)"
+	echo "$repo_obj" | value="${value}" yq ".[\"$REPO_POST_COPY_HOOK_KEY\"] = [strenv(value)]"
 }
 
 config__repo__obj_get_post_copy_hook() {
 	debug "$*"
 	local repo_obj="${1:?}"
 
-	echo "$repo_obj" | yq -r ".[\"$REPO_POST_COPY_HOOK_KEY\"]" | yq__normalize_null
+	echo "$repo_obj" | yq -r ".[\"$REPO_POST_COPY_HOOK_KEY\"][]" | yq__normalize_null
 }
 
 config__create_file_if_not_exist() {
@@ -2161,6 +2161,7 @@ dependency__assert_yq() {
 #################
 
 sh__run_bash_script_in_dir() {
+	echo "$*"
 	# TODO: maybe should create a file in the directory and just invoke it
 	# This allows the user to use the shebang to use the interpreter they want
 	# But this is such a pain in the ass to do it properly without any
