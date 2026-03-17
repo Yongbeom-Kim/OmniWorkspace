@@ -165,7 +165,7 @@ REPO_KEY="repos"
 REPO_ORIGINURL_KEY="origin_url"
 REPO_DIRECTORY_KEY="dir"
 REPO_POST_COPY_HOOK_KEY="post-copy-hook"
-REPO_POST_COPY_HOOK_DEFAULT_VALUE=$'#!/bin/bash\n# Run the following script after cloning the repo:\n\n'
+REPO_POST_COPY_HOOK_DEFAULT_VALUE=$'#!/bin/bash\n# Even if there is a shebang here, it is a lie. All scripts are run with bash.\n# Run the following script after cloning the repo:\n\n'
 
 # workspaces: {
 #   "<workspace_name>": {
@@ -1031,6 +1031,11 @@ workspace__add() {
 
 	fs__workspace_mkdir_idempotent "$workspace_name"
 
+	local added_repos=()
+	local branch_name
+	branch_name="$(config__workspace__obj_get_branch "$workspace_obj")"
+
+	# Pass 1: create worktrees and update config object
 	for repo in "${workspace_repos[@]+"${workspace_repos[@]}"}"; do
 		if [[ -z $repo ]]; then
 			continue
@@ -1041,13 +1046,10 @@ workspace__add() {
 			continue
 		fi
 
-		local repo_obj repo_dir repo_post_copy_hook
+		local repo_obj repo_dir
 		repo_obj=$(config__repo__get "$repo")
 		repo_dir=$(config__repo__obj_get_directory "$repo_obj")
-		repo_post_copy_hook="$(config__repo__obj_get_post_copy_hook "$repo_obj")"
 		local subtree_dir="$workspace_dir/$repo"
-		local branch_name
-		branch_name="$(config__workspace__obj_get_branch "$workspace_obj")"
 
 		local worktree_rc=0
 		git__create_workspace_worktree "$repo_dir" "$subtree_dir" "$branch_name" || worktree_rc=$?
@@ -1056,21 +1058,40 @@ workspace__add() {
 			continue
 		fi
 
-		if [[ "$worktree_rc" -ne "$GIT_WORKTREE_ALREADY_EXISTS_RETURN_CODE" ]] && [[ -n "$repo_post_copy_hook" ]]; then
-			if ! sh__run_bash_script_in_dir "$subtree_dir" "$repo_post_copy_hook"; then
-				warn "Failed to execute post-copy hook in $subtree_dir"
-			fi
-		fi
-
 		workspace_obj=$(config__workspace__obj_add_repo "$workspace_obj" "$repo")
 		git__set_upstream_branch "$subtree_dir" "$branch_name" || true
+		if [[ "$worktree_rc" -ne "$GIT_WORKTREE_ALREADY_EXISTS_RETURN_CODE" ]]; then
+			added_repos+=("$repo")
+		fi
 
 		echo "Successfully added repo $repo to workspace $workspace_name."
 	done
 
+	# Save config before running hooks
 	if ! config__workspace__put "$workspace_name" "$workspace_obj"; then
 		warn "Failed to save workspace $workspace_name config."
 		return 1
+	fi
+
+	# Pass 2: run post-copy hooks after config is committed
+	if [[ ${#added_repos[@]} -gt 0 ]]; then
+		info "Added repos, running post-copy hooks:"
+		for repo in "${added_repos[@]}"; do
+			local repo_obj repo_post_copy_hook
+			repo_obj=$(config__repo__get "$repo")
+			repo_post_copy_hook="$(config__repo__obj_get_post_copy_hook "$repo_obj")"
+			local subtree_dir="$workspace_dir/$repo"
+
+			if [[ -n "$repo_post_copy_hook" ]]; then
+				info "Running post-copy hook for $repo..."
+				info "$repo_post_copy_hook"
+				if ! sh__run_bash_script_in_dir "$subtree_dir" "$repo_post_copy_hook"; then
+					warn "Failed to execute post-copy hook in $subtree_dir"
+				fi
+			else
+				info "No post-copy hook found for ${repo}, skipping."
+			fi
+		done
 	fi
 }
 
