@@ -395,11 +395,11 @@ Creates a workspace and/or adds repos to an existing workspace.
 	validate_name "$workspace_name" "workspace name"
 	shift
 	local workspace_repos=("$@")
-	for repo_name in "${workspace_repos[@]}"; do
+	for repo_name in "${workspace_repos[@]+"${workspace_repos[@]}"}"; do
 		validate_name "$repo_name" "repo name"
 	done
 
-	workspace__add "$workspace_name" "${workspace_repos[@]}"
+	workspace__add "$workspace_name" "${workspace_repos[@]+"${workspace_repos[@]}"}"
 }
 
 cmd__workspace__delete() {
