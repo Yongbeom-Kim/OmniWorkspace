@@ -148,6 +148,8 @@ WORKSPACES_DIR="${WORKSPACES_DIR:-$PROJ_DIR/workspaces}"
 CONFIG_FILE_PATH="$PROJ_DIR/config.yaml"
 CONFIG_FILE_LOCK_DIR_PATH="$PROJ_DIR/config.lock" # mkdir as lock
 
+GIT_WORKTREE_ALREADY_EXISTS_RETURN_CODE=42 # Arbitrary; avoids bash-reserved ranges (1-2, 126-165+)
+
 ##########################
 ### Object definitions ###
 ##########################
@@ -156,11 +158,14 @@ CONFIG_FILE_LOCK_DIR_PATH="$PROJ_DIR/config.lock" # mkdir as lock
 #   "<repo_name>": {
 #       "origin_url": "<origin URL>"
 #       "dir": "<repo directory path>"
+#       "post-copy-hook": "<some bash script>"
 #   }
 # }
 REPO_KEY="repos"
 REPO_ORIGINURL_KEY="origin_url"
 REPO_DIRECTORY_KEY="dir"
+REPO_POST_COPY_HOOK_KEY="post-copy-hook"
+REPO_POST_COPY_HOOK_DEFAULT_VALUE=$'#!/bin/bash\n# Run the following script after cloning the repo:\n\n'
 
 # workspaces: {
 #   "<workspace_name>": {
@@ -173,6 +178,13 @@ WORKSPACE_KEY="workspaces"
 WORKSPACE_REPOS_KEY="repos"
 WORKSPACE_BRANCH_KEY="branch"
 WORKSPACE_DIRECTORY_KEY="dir"
+
+# global: {
+#   "editor": "<editor command>"
+# }
+GLOBAL_KEY="global"
+GLOBAL_EDITOR_KEY="editor"
+GLOBAL_EDITOR_DEFAULT_VALUE="vi"
 
 # TODO: may cause crash when sourcing in zshrc or bashrc, but it is OK for now.
 # Validate that critical directories are absolute paths under $HOME
@@ -608,6 +620,7 @@ Sub-commands:
     list                        List all registered repositories
     pull [repo_name ...]        Pull latest changes for repositories
     reset-to-origin [repo ...]  Fetch and hard reset to origin's current branch
+    post-copy-hook <repo_name>  Create or edit post-copy hooks (as bash script)
 "
 
 	debug "$*"
@@ -632,6 +645,10 @@ Sub-commands:
 	"reset-to-origin")
 		shift
 		cmd__repo__reset_to_origin "$@"
+		;;
+	"post-copy-hook")
+		shift
+		cmd__repo__set_post_copy_hook "$@"
 		;;
 	*)
 		fatal "Error: unknown sub-command '${1:-}'.$USAGE"
@@ -782,6 +799,49 @@ If no repositories are specified, resets all registered repositories.
 	done
 }
 
+cmd__repo__set_post_copy_hook() {
+	local USAGE="
+
+Usage (repo post-copy-hook):
+    $SCRIPT_NAME repo post-copy-hook <repo_name>
+
+Add or edit arbitrary bash scripts that will be run after any worktree copy operation.
+Typically this will be run after adding a repo to a workspace.
+"
+	debug "$*"
+	repo__validate_all
+
+	local repo="${1:?"Repo name is required.$USAGE"}"
+	local repo_obj
+	if ! repo_obj="$(config__repo__get "$repo")"; then
+		fatal "Repo $repo does not exist."
+	fi
+	local repo_post_copy_hook
+	repo_post_copy_hook="$(config__repo__obj_get_post_copy_hook "$repo_obj")"
+
+	if [[ -z "$repo_post_copy_hook" ]]; then
+		repo_post_copy_hook="$REPO_POST_COPY_HOOK_DEFAULT_VALUE"
+	fi
+
+	local global_obj
+	global_obj="$(config__global__get)"
+	local global_editor
+	global_editor="$(config__global__obj_get_editor "$global_obj")"
+
+	local tempfile
+	tempfile="$(fs__tempfile__safe_create)"
+	# NOTE: tempfile may leak if interrupted (e.g., Ctrl+C). Cannot use trap here
+	# as it would conflict with the config file lock's EXIT trap.
+	fs__tempfile__write "$tempfile" "$repo_post_copy_hook"
+	fs__tempfile__open "$tempfile" "$global_editor"
+
+	repo_post_copy_hook="$(fs__tempfile__read "$tempfile")"
+	fs__tempfile__clean "$tempfile"
+
+	repo_obj="$(config__repo__obj_set_post_copy_hook "$repo_obj" "$repo_post_copy_hook")"
+	config__repo__put "$repo" "$repo_obj"
+}
+
 ###########################
 ##### BASH COMPLETION #####
 ###########################
@@ -894,7 +954,7 @@ completion__bash_workspace() {
 completion__bash_repo() {
 	local cmds=()
 	if [[ $COMP_CWORD -eq 2 ]]; then
-		cmds=("add" "remove" "list" "pull" "reset-to-origin")
+		cmds=("add" "remove" "list" "pull" "reset-to-origin" "post-copy-hook")
 		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
 		return 0
 	fi
@@ -903,6 +963,13 @@ completion__bash_repo() {
 	case "$subcmd" in
 	"add" | "list")
 		# no further autocompletions
+		return 0
+		;;
+	"post-copy-hook")
+		if [[ $COMP_CWORD -eq 3 ]]; then
+			cmds=($(config__repo__list))
+			COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+		fi
 		return 0
 		;;
 	"remove" | "pull" | "reset-to-origin")
@@ -948,15 +1015,24 @@ workspace__add() {
 			continue
 		fi
 
-		local repo_obj repo_dir
+		local repo_obj repo_dir repo_post_copy_hook
 		repo_obj=$(config__repo__get "$repo")
 		repo_dir=$(config__repo__obj_get_directory "$repo_obj")
+		repo_post_copy_hook="$(config__repo__obj_get_post_copy_hook "$repo_obj")"
 		local subtree_dir="$workspace_dir/$repo"
 		local branch_name="$workspace_name"
 
-		if ! git__create_workspace_worktree_idempotent "$repo_dir" "$subtree_dir" "$branch_name"; then
-			warn "Failed to add git worktree of $repo to workspace $workspace_name. Maybe it already exists? Try again later."
+		local worktree_rc=0
+		git__create_workspace_worktree "$repo_dir" "$subtree_dir" "$branch_name" || worktree_rc=$?
+		if [[ "$worktree_rc" -ne 0 ]] && [[ "$worktree_rc" -ne "$GIT_WORKTREE_ALREADY_EXISTS_RETURN_CODE" ]]; then
+			warn "Failed to add git worktree of $repo to workspace $workspace_name. Try again later."
 			continue
+		fi
+
+		if [[ "$worktree_rc" -ne "$GIT_WORKTREE_ALREADY_EXISTS_RETURN_CODE" ]] && [[ -n "$repo_post_copy_hook" ]]; then
+			if ! sh__run_bash_script_in_dir "$subtree_dir" "$repo_post_copy_hook"; then
+				warn "Failed to execute post-copy hook in $subtree_dir"
+			fi
 		fi
 
 		workspace_obj=$(config__workspace__obj_add_repo "$workspace_obj" "$repo")
@@ -1223,17 +1299,27 @@ workspace__validate() {
 			continue
 		fi
 
-		local repo_obj repo_dir
+		local repo_obj repo_dir repo_post_copy_hook
 		repo_obj=$(config__repo__get "$repo")
 		repo_dir=$(config__repo__obj_get_directory "$repo_obj")
+		repo_post_copy_hook="$(config__repo__obj_get_post_copy_hook "$repo_obj")"
 		local subtree_dir
 		subtree_dir=$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo")
 		local branch_name="$workspace_name"
 
-		if ! git__create_workspace_worktree_idempotent "$repo_dir" "$subtree_dir" "$branch_name"; then
-			warn "Failed to add git worktree of $repo to workspace $workspace_name. Maybe it already exists? Try again later."
+		local worktree_rc=0
+		git__create_workspace_worktree "$repo_dir" "$subtree_dir" "$branch_name" || worktree_rc=$?
+		if [[ "$worktree_rc" -ne 0 ]] && [[ "$worktree_rc" -ne "$GIT_WORKTREE_ALREADY_EXISTS_RETURN_CODE" ]]; then
+			warn "Failed to add git worktree of $repo to workspace $workspace_name. Try again later."
 			continue
 		fi
+
+		if [[ "$worktree_rc" -ne "$GIT_WORKTREE_ALREADY_EXISTS_RETURN_CODE" ]] && [[ -n "$repo_post_copy_hook" ]]; then
+			if ! sh__run_bash_script_in_dir "$subtree_dir" "$repo_post_copy_hook"; then
+				warn "Failed to execute post-copy hook in $subtree_dir"
+			fi
+		fi
+
 	done
 }
 
@@ -1344,6 +1430,45 @@ repo__remove() {
 ###############################
 ##### Yaml Configurations #####
 ###############################
+
+##########################
+### Yaml Global Config ###
+##########################
+
+config__global__get() {
+	debug "$*"
+
+	yq -r ".[\"${GLOBAL_KEY}\"]" "$CONFIG_FILE_PATH" # Returning null is expected if no global config
+}
+
+config__global__put() {
+	debug "$*"
+	local global_obj="${1:?}"
+
+	global_obj="${global_obj}" yq -i ".[\"${GLOBAL_KEY}\"] = env(global_obj)" "$CONFIG_FILE_PATH"
+}
+
+config__global__obj_get_editor() {
+	debug "$*"
+	local global_obj="${1:?}"
+
+	local result
+	result="$(echo "$global_obj" | yq -r ".[\"${GLOBAL_EDITOR_KEY}\"]")"
+	if [[ -z "$result" || "$result" == "null" ]]; then
+		# TODO: respect $VISUAL and $EDITOR environment variables
+		echo "$GLOBAL_EDITOR_DEFAULT_VALUE"
+		return
+	fi
+	echo "$result"
+}
+
+config__global__obj_set_editor() {
+	debug "$*"
+	local global_obj="${1:?}"
+	local editor="${2:?}"
+
+	echo "${global_obj}" | editor="${editor}" yq ".[\"${GLOBAL_EDITOR_KEY}\"] = env(editor)"
+}
 
 #############################
 ### Yaml Workspace Config ###
@@ -1585,6 +1710,20 @@ config__repo__obj_get_originurl() {
 	echo "$repo_obj" | yq -r ".[\"$REPO_ORIGINURL_KEY\"]" | yq__normalize_null
 }
 
+config__repo__obj_set_post_copy_hook() {
+	debug "$*"
+	local repo_obj="${1:?}" value="${2:?}"
+
+	echo "$repo_obj" | value="${value}" yq ".[\"$REPO_POST_COPY_HOOK_KEY\"] = env(value)"
+}
+
+config__repo__obj_get_post_copy_hook() {
+	debug "$*"
+	local repo_obj="${1:?}"
+
+	echo "$repo_obj" | yq -r ".[\"$REPO_POST_COPY_HOOK_KEY\"]" | yq__normalize_null
+}
+
 config__create_file_if_not_exist() {
 	if [[ ! -f "$CONFIG_FILE_PATH" ]]; then
 		mkdir -p "$REPOS_DIR"
@@ -1661,7 +1800,9 @@ git__get_repo_name() {
 	echo "$name"
 }
 
-git__create_workspace_worktree_idempotent() {
+# Returns $GIT_WORKTREE_ALREADY_EXISTS_RETURN_CODE (42) if worktree already exists.
+# Callers must use `|| rc=$?` to avoid set -e aborting on the non-zero return.
+git__create_workspace_worktree() {
 	debug "$*"
 	local source_repo_dir="$1"
 	local destination_worktree_dir="$2"
@@ -1669,7 +1810,7 @@ git__create_workspace_worktree_idempotent() {
 
 	if git__check_worktree_exists "$source_repo_dir" "$destination_worktree_dir"; then
 		debug "Git worktree already exists" "$source_repo_dir" to "$destination_worktree_dir"
-		return 0
+		return $GIT_WORKTREE_ALREADY_EXISTS_RETURN_CODE
 	fi
 
 	# Try creating with new branch first; if branch already exists, use it directly
@@ -1788,6 +1929,43 @@ git__reset_hard() {
 ######################
 ##### Filesystem #####
 ######################
+
+##################
+### Temp Files ###
+##################
+
+fs__tempfile__safe_create() {
+	local temp_dir
+	temp_dir=$(mktemp -d)
+	chmod 700 "$temp_dir"
+
+	local temp_file
+	temp_file=$(mktemp "$temp_dir/tmp.XXXXXX")
+	chmod 600 "$temp_file"
+
+	echo "$temp_file"
+}
+
+fs__tempfile__open() {
+	local temp_file="${1:?}" editor="${2:?}"
+	# editor may contain arguments (e.g., "code --wait"), so we need eval
+	eval "${editor}" '"${temp_file}"'
+}
+
+fs__tempfile__write() {
+	local temp_file="${1:?}" content="${2:?}"
+	printf '%s' "$content" >"${temp_file}"
+}
+
+fs__tempfile__read() {
+	local temp_file="${1:?}"
+	cat "${temp_file}"
+}
+
+fs__tempfile__clean() {
+	local temp_file="${1:?}"
+	rm "$temp_file" && rmdir "$(dirname "$temp_file")" || true
+}
 
 # Create workspace dir and return the path
 fs__workspace_mkdir_idempotent() {
@@ -1921,6 +2099,15 @@ dependency__assert_yq() {
 #################
 ##### Utils #####
 #################
+
+sh__run_bash_script_in_dir() {
+	# TODO: maybe should create a file in the directory and just invoke it
+	# This allows the user to use the shebang to use the interpreter they want
+	# But this is such a pain in the ass to do it properly without any
+	# TOCTOU security vulnerabilities. So i'll keep it that way
+	local dir="${1:?}" script_contents="${2:?}"
+	(cd "${dir}" && /usr/bin/env bash -s <<<"${script_contents}")
+}
 
 # Normalize yq "null" output to empty string.
 # yq -r returns the literal string "null" for missing/null fields.
