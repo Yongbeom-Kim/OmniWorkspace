@@ -845,6 +845,19 @@ completion__bash() {
 
 completion__bash_workspace() {
 	local cmds=()
+	local top="${COMP_WORDS[1]}"
+
+	# Shortcuts (exec, checkout, co, cd) skip the subcommand position
+	case "$top" in
+	"exec" | "checkout" | "co" | "cd")
+		if [[ $COMP_CWORD -eq 2 ]]; then
+			cmds=($(config__workspace__list))
+			COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+		fi
+		return 0
+		;;
+	esac
+
 	# Position 2: subcommand
 	if [[ $COMP_CWORD -eq 2 ]]; then
 		cmds=("add" "create" "add-repo" "remove-repo" "delete" "list" "exec" "checkout" "pull" "reset-hard-to-origin" "cd")
