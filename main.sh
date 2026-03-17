@@ -845,18 +845,30 @@ completion__bash() {
 
 completion__bash_workspace() {
 	local cmds=()
+	# Position 2: subcommand
 	if [[ $COMP_CWORD -eq 2 ]]; then
-		cmds=($(config__workspace__list))
+		cmds=("add" "create" "add-repo" "remove-repo" "delete" "list" "exec" "checkout" "pull" "reset-hard-to-origin" "cd")
 		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
 		return 0
 	fi
 
 	local subcmd="${COMP_WORDS[2]}"
+	# Position 3: workspace name (for commands that take one)
+	if [[ $COMP_CWORD -eq 3 ]]; then
+		case "$subcmd" in
+		"list")
+			return 0
+			;;
+		*)
+			cmds=($(config__workspace__list))
+			COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+			return 0
+			;;
+		esac
+	fi
+
+	# Position 4+: repo names for add/remove-repo
 	case "$subcmd" in
-	"delete" | "list" | "exec" | "checkout" | "pull" | "reset-hard-to-origin" | "cd")
-		# no further autocompletions
-		return 0
-		;;
 	"add" | "add-repo" | "create" | "remove-repo")
 		cmds=($(config__repo__list))
 		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
