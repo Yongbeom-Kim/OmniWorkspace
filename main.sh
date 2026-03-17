@@ -844,6 +844,7 @@ completion__bash() {
 }
 
 completion__bash_workspace() {
+	local cur="${COMP_WORDS[COMP_CWORD]}"
 	local cmds=()
 	local top="${COMP_WORDS[1]}"
 
