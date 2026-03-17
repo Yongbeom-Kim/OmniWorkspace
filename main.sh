@@ -1046,7 +1046,8 @@ workspace__add() {
 		repo_dir=$(config__repo__obj_get_directory "$repo_obj")
 		repo_post_copy_hook="$(config__repo__obj_get_post_copy_hook "$repo_obj")"
 		local subtree_dir="$workspace_dir/$repo"
-		local branch_name="$workspace_name"
+		local branch_name
+		branch_name="$(config__workspace__obj_get_branch "$workspace_obj")"
 
 		local worktree_rc=0
 		git__create_workspace_worktree "$repo_dir" "$subtree_dir" "$branch_name" || worktree_rc=$?
@@ -1365,7 +1366,8 @@ workspace__validate() {
 		repo_post_copy_hook="$(config__repo__obj_get_post_copy_hook "$repo_obj")"
 		local subtree_dir
 		subtree_dir=$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo")
-		local branch_name="$workspace_name"
+		local branch_name
+		branch_name="$(config__workspace__obj_get_branch "$ws_obj")"
 
 		local worktree_rc=0
 		git__create_workspace_worktree "$repo_dir" "$subtree_dir" "$branch_name" || worktree_rc=$?
