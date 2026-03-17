@@ -11,10 +11,16 @@ A multi-repo workspace manager that groups git repositories into named workspace
 brew install git yq
 
 # Install ows
-./dev-install.sh
+curl -fsSL https://raw.githubusercontent.com/Yongbeom-Kim/OmniWorkspace/main/main.sh | sudo tee /usr/local/bin/ows > /dev/null && sudo chmod +x /usr/local/bin/ows
 ```
 
-This symlinks `main.sh` to `/usr/local/bin/ows`.
+**For development**, clone the repo and symlink instead:
+
+```bash
+git clone https://github.com/Yongbeom-Kim/OmniWorkspace.git
+cd OmniWorkspace
+./dev-install.sh  # Symlinks main.sh to /usr/local/bin/ows
+```
 
 ## Quick Start
 
@@ -45,6 +51,7 @@ ows repo add <url> [name]      # Register and clone a repo (name derived from UR
 ows repo remove <name>         # Unregister and delete a repo
 ows repo list                  # List all registered repos
 ows repos                      # Shorthand for repo list
+ows repo post-copy-hook <name> # Create/edit a post-copy hook script
 ```
 
 ### Workspaces
@@ -60,9 +67,21 @@ ows workspaces                                 # Shorthand for workspace list
 ows workspace exec <name> <command> [args...]  # Run a command in the workspace directory
 ows workspace checkout <name> <branch>         # Check out a branch across all repos
 ows workspace checkout <name> -b <branch>      # Same (the -b flag is accepted but optional)
+ows workspace run-hooks <name>                 # Run post-copy hooks for all repos
 ```
 
 **Command aliases:** `workspace` can be shortened to `ws`, `w`, or `wsp`. `repo` can be shortened to `r`.
+
+### Post-Copy Hooks
+
+You can attach a bash script to any repo that runs automatically after a worktree is created (e.g., when adding a repo to a workspace). This is useful for running install steps, builds, or other setup.
+
+```bash
+ows repo post-copy-hook <repo_name>    # Open an editor to create/edit the hook
+ows workspace run-hooks <workspace>    # Manually run all hooks for a workspace
+```
+
+Hooks are stored in `config.yaml` and executed with `bash`. If your hook uses `printf` with arguments starting with `-`, use `printf --` to avoid option parsing issues (e.g., `printf -- "--flag %s " "$var"`).
 
 ### Workspace Detection
 
@@ -108,6 +127,10 @@ repos:
   backend:
     origin_url: https://github.com/org/backend.git
     dir: /Users/you/.ows/repos/backend
+    post-copy-hook:
+      - |
+        #!/bin/bash
+        npm install
 workspaces:
   my-feature:
     repos:
