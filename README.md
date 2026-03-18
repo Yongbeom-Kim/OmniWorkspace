@@ -2,7 +2,52 @@
 
 A multi-repo workspace manager that groups git repositories into named workspaces using git worktrees. Operate on multiple repos as a unit — create branches, run commands, and switch contexts across all of them at once.
 
-## Install
+## Why did I make this tool?
+
+In my work, I often need to manage multiple copies of multiple repos, and sometimes features need to have a combination of repos.
+
+I might have something like:
+
+```
+~/Dev/
+├── 1/ # Some feature
+│   └── monorepo_1/
+├── 2/ # A feature: I need to work across two repos.
+│   ├── monorepo_1/ # Oh, a copy?
+│   └── monorepo_2/
+└── 3/ # OMG, i need to work across 4 repos for this feature
+    ├── monorepo_3/
+    ├── repo_1/
+    ├── repo_2/
+    └── repo_3/
+```
+
+This **sucks** for many reasons.
+- Typically I would `git clone` multiple repos. But for multiple monorepos, the `.git` directory takes up an *incredible* amount of disk space. `.git` directories can take up to 2-10GB of space, depending on how big the repo is.
+- I would also create and re-use directories with placeholder names (as you see, `1/`, `2/`, `3/`). But this is hard to understand and remember.
+
+### Why not use `git worktree`?
+I find `git worktree` to have a particularly bad developer experience. The main issue is that it creates worktrees *in the current repo's directory*. How are you supposed to work across different repos like this?
+
+This tool wraps `git worktree` to compose workspaces from repositories.
+
+Instead, I can do `ows workspace add my-feature monorepo_1 repo_1 repo_2 repo_3` to automatically create a directory with copies of all 4 repos.
+
+This will create:
+
+```
+~/.ows/
+└── workspaces/
+    └── my-feature/
+        ├── monorepo_1/
+        ├── repo_1/
+        ├── repo_2/
+        └── repo_3/
+```
+
+And you can do `ows workspace cd my-feature` to cd into the workspace, or `ows workspace exec my-feature <command>` to execute something in the directory.
+
+## Installation
 
 **Dependencies:** `git`, [`yq`](https://github.com/mikefarah/yq)
 
@@ -11,7 +56,7 @@ A multi-repo workspace manager that groups git repositories into named workspace
 brew install git yq
 
 # Install ows
-curl -fsSL https://raw.githubusercontent.com/Yongbeom-Kim/OmniWorkspace/main/main.sh | sudo tee /usr/local/bin/ows > /dev/null && sudo chmod +x /usr/local/bin/ows
+curl -fsSL https://raw.githubusercontent.com/Yongbeom-Kim/OmniWorkspace/refs/heads/main/main.sh | sudo tee /usr/local/bin/ows > /dev/null && sudo chmod +x /usr/local/bin/ows
 ```
 
 **For development**, clone the repo and symlink instead:
@@ -113,7 +158,8 @@ ows ws checkout new-branch # Checks out across my-feature
 - **Git worktrees:** Workspaces use worktrees rather than full clones, so they share the git object store and are lightweight.
 - **Idempotent operations:** Commands are safe to re-run — adding an already-existing repo or workspace is a no-op.
 - **Safety:** `rm -rf` operations are guarded to only delete within allowed parent directories under `$HOME`.
-- **Important:** Do not manually check out branches inside workspace repo directories (e.g. via `git checkout`). Use `ows workspace checkout` instead — it keeps the config and all worktrees in sync. Manually switching branches can cause the workspace state to diverge from `config.yaml`.
+
+> **Warning:** Do not manually check out branches inside workspace repo directories (e.g. via `git checkout`). Use `ows workspace checkout` instead — it keeps the config and all worktrees in sync. Manually switching branches can cause the workspace state to diverge from `config.yaml`.
 
 ## Configuration
 
@@ -152,7 +198,17 @@ The default data directory is `~/.ows`. Override with environment variables:
 ```bash
 make setup    # Install pre-commit hook (runs shfmt)
 make fmt      # Format main.sh with shfmt
+make test     # Run tests (requires Docker)
 DEBUG=1 ows …  # Enable debug logging with stack traces
+```
+
+### Running Tests
+
+Tests run inside Docker containers. You'll need [Docker](https://docs.docker.com/get-docker/) installed and running.
+
+```bash
+make test          # Run all tests
+make test-verbose  # Run with verbose output
 ```
 
 ## Name Rules
