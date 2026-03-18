@@ -204,12 +204,22 @@ DEBUG=1 ows …  # Enable debug logging with stack traces
 
 ### Running Tests
 
-Tests run inside Docker containers. You'll need [Docker](https://docs.docker.com/get-docker/) installed and running.
+Tests run inside Docker containers against multiple bash environments for compatibility testing. You'll need [Docker](https://docs.docker.com/get-docker/) installed and running.
 
 ```bash
-make test          # Run all tests
-make test-verbose  # Run with verbose output
+make test                # Run all tests against all images
+make test-verbose        # Run with verbose output
+make test-smoke          # Run tests against upstream bash 3.2 only (faster)
+make test-smoke-verbose  # Smoke test with verbose output
 ```
+
+**Test images:**
+
+| Image | Dockerfile | Description |
+|---|---|---|
+| `ows-test` | `TestImage.Dockerfile` | Upstream GNU bash 3.2 |
+| `ows-apple` | `AppleImage.Dockerfile` | Apple's bash-142 (macOS bash 3.2 with Apple patches) |
+
 
 ## Name Rules
 
