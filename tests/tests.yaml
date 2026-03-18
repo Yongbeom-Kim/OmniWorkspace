@@ -1,0 +1,12 @@
+tests:
+  - name: "Can add empty repo to workspace"
+    prepare: 
+    |-
+      ows repo add git@github.com:Yongbeom-Kim/OmniWorkspace-test-empty-repo.git
+    test:
+    |-
+      ows workspace add test-workspace-with-empty-repo OmniWorkspace-test-empty-repo
+    verify:
+    |-
+      true
+    

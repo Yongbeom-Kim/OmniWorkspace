@@ -2100,6 +2100,10 @@ fs__workspace_get_dir() {
 
 # lock (mkdir-based, atomic on all filesystems)
 fs__acquire_lock() {
+	if ! [[ -d "$PROJ_DIR" ]]; then
+		mkdir -p "$PROJ_DIR"
+	fi
+
 	# Detect and clean up stale locks from dead processes
 	local pid_file="$CONFIG_FILE_LOCK_DIR_PATH/pid"
 	if [[ -d "$CONFIG_FILE_LOCK_DIR_PATH" && -f "$pid_file" ]]; then
