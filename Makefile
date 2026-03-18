@@ -1,4 +1,4 @@
-.PHONY: setup test
+.PHONY: setup fmt test test-verbose test-smoke test-smoke-verbose
 
 setup:
 	cp ./git-hooks/pre-commit ./.git/hooks/pre-commit
@@ -12,3 +12,9 @@ test:
 
 test-verbose:
 	bash tests/test-runner.sh -v
+
+test-smoke:
+	bash tests/test-runner.sh -f tests/TestImage.Dockerfile
+
+test-smoke-verbose:
+	bash tests/test-runner.sh -v -f tests/TestImage.Dockerfile

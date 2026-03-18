@@ -4,16 +4,24 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TESTS_FILE="$SCRIPT_DIR/tests.yaml"
-IMAGE_NAME="ows-test"
 VERBOSE=0
+DOCKERFILES=()
 
 # Parse flags
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -v) VERBOSE=1; shift ;;
+        -f) DOCKERFILES+=("$2"); shift 2 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
 done
+
+# Default to all Dockerfiles if none specified
+if [[ ${#DOCKERFILES[@]} -eq 0 ]]; then
+    for f in "$SCRIPT_DIR"/*Image.Dockerfile; do
+        DOCKERFILES+=("$f")
+    done
+fi
 
 # Prerequisite checks
 check_prerequisites() {
@@ -36,12 +44,15 @@ check_prerequisites() {
 }
 
 # Build test image
+# Args: $1 = dockerfile path, $2 = image name
 build_image() {
-    echo "Building test image..."
+    local dockerfile="$1"
+    local image_name="$2"
+    echo "Building $image_name from $(basename "$dockerfile")..."
     if [[ "$VERBOSE" -eq 1 ]]; then
-        docker build -t "$IMAGE_NAME" -f "$SCRIPT_DIR/TestImage.Dockerfile" "$REPO_ROOT"
+        docker build -t "$image_name" -f "$dockerfile" "$REPO_ROOT"
     else
-        docker build -t "$IMAGE_NAME" -f "$SCRIPT_DIR/TestImage.Dockerfile" "$REPO_ROOT" &>/dev/null
+        docker build -t "$image_name" -f "$dockerfile" "$REPO_ROOT" &>/dev/null
     fi
 }
 
@@ -59,14 +70,16 @@ run_hook() {
     fi
 }
 
-# Run all tests
+# Run all tests against a given image
+# Args: $1 = image name
 run_tests() {
+    local image_name="$1"
     local test_count
     test_count=$(yq '.tests | length' "$TESTS_FILE")
 
     if [[ "$test_count" -eq 0 ]]; then
         echo "No tests found"
-        exit 0
+        return 0
     fi
 
     local passed=0
@@ -82,7 +95,7 @@ run_tests() {
         test_cmd=$(yq ".tests[$i].test" "$TESTS_FILE")
         verify=$(yq ".tests[$i].verify" "$TESTS_FILE")
 
-        local container_name="ows-test-$i"
+        local container_name="${image_name}-$i"
         local test_passed=1
 
         # Print test header
@@ -96,7 +109,7 @@ run_tests() {
         docker rm -f "$container_name" &>/dev/null || true
 
         # Start fresh container
-        if ! docker run -d --name "$container_name" -v "$HOME/.ssh:/root/.ssh:ro" "$IMAGE_NAME" &>/dev/null; then
+        if ! docker run -d --name "$container_name" -v "$HOME/.ssh:/root/.ssh:ro" "$image_name" &>/dev/null; then
             test_passed=0
         fi
 
@@ -144,11 +157,34 @@ run_tests() {
     echo "Results: $passed passed, $failed failed"
 
     if [[ "$failed" -gt 0 ]]; then
-        exit 1
+        return 1
     fi
+}
+
+# Derive image name from dockerfile name
+# e.g. TestImage.Dockerfile -> ows-test, AppleImage.Dockerfile -> ows-apple
+image_name_from_dockerfile() {
+    local basename
+    basename="$(basename "$1" .Dockerfile)"
+    basename="${basename%Image}"
+    echo "ows-$(echo "$basename" | tr '[:upper:]' '[:lower:]')"
 }
 
 # Main flow
 check_prerequisites
-build_image
-run_tests
+
+any_failed=0
+for dockerfile in "${DOCKERFILES[@]}"; do
+    image_name="$(image_name_from_dockerfile "$dockerfile")"
+    echo ""
+    echo "=== $image_name ($(basename "$dockerfile")) ==="
+    echo ""
+    build_image "$dockerfile" "$image_name"
+    if ! run_tests "$image_name"; then
+        any_failed=1
+    fi
+done
+
+if [[ "$any_failed" -eq 1 ]]; then
+    exit 1
+fi
