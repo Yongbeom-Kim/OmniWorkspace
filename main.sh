@@ -1463,13 +1463,14 @@ repo__add() {
 
 	# Check if repo already exists with the same config — skip if so
 	local existing_obj existing_url existing_dir
-	existing_obj=$(config__repo__get "$repo_name")
-	existing_url=$(config__repo__obj_get_originurl "$existing_obj")
-	existing_dir=$(config__repo__obj_get_directory "$existing_obj")
-	if [[ "$existing_url" == "$repo_url" && "$existing_dir" == "$repo_dir" ]]; then
-		if git__validate_repo "$repo_url" "$repo_name"; then
-			debug "Repository $repo_name already exists with same config, skipping"
-			return 0
+	if existing_obj=$(config__repo__get "$repo_name"); then
+		existing_url=$(config__repo__obj_get_originurl "$existing_obj")
+		existing_dir=$(config__repo__obj_get_directory "$existing_obj")
+		if [[ "$existing_url" == "$repo_url" && "$existing_dir" == "$repo_dir" ]]; then
+			if git__validate_repo "$repo_url" "$repo_name"; then
+				debug "Repository $repo_name already exists with same config, skipping"
+				return 0
+			fi
 		fi
 	fi
 
@@ -1896,6 +1897,13 @@ git__create_workspace_worktree() {
 		return $GIT_WORKTREE_ALREADY_EXISTS_RETURN_CODE
 	fi
 
+	# Empty repos (no commits) have no valid HEAD, so git worktree add fails.
+	# Bootstrap with an empty commit so branches can be created.
+	if ! git -C "$source_repo_dir" rev-parse HEAD &>/dev/null; then
+		debug "Empty repository detected, creating initial commit"
+		git -C "$source_repo_dir" commit --allow-empty -m "Initial commit"
+	fi
+
 	# Try creating with new branch first; if branch already exists, use it directly
 	if ! git -C "$source_repo_dir" worktree add -b "$branch_name" "$destination_worktree_dir"; then
 		git -C "$source_repo_dir" worktree add "$destination_worktree_dir" "$branch_name"
@@ -1912,6 +1920,7 @@ git__remove_workspace_worktree_idempotent() {
 		return 0
 	fi
 
+	debug "Removing worktree at $destination_worktree_dir..."
 	if ! git -C "$source_repo_dir" worktree remove --force "$destination_worktree_dir"; then
 		warn "Failed to remove git worktree at '$destination_worktree_dir'"
 		return 1
