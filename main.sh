@@ -734,18 +734,7 @@ Lists all registered repositories.
 
 	debug "$*"
 	repo__validate_all
-	local repos=($(config__repo__list))
-	local cells=()
-
-	for repo in "${repos[@]+"${repos[@]}"}"; do
-		local repo_obj
-		repo_obj=$(config__repo__get "$repo")
-		cells+=("$repo")
-		cells+=("$(config__repo__obj_get_originurl "$repo_obj")")
-		cells+=("$(config__repo__obj_get_directory "$repo_obj")")
-	done
-
-	print_table_horizontally 3 "repo" "origin" "directory" "${cells[@]+"${cells[@]}"}"
+	repo__list
 }
 
 cmd__repo__pull() {
@@ -1444,6 +1433,21 @@ repo__remove() {
 	config__repo__delete_idempotent "$repo_name"
 
 	echo "Repository $repo_name removed successfully."
+}
+
+repo__list() {
+	local repos=($(config__repo__list))
+	local cells=()
+
+	for repo in "${repos[@]+"${repos[@]}"}"; do
+		local repo_obj
+		repo_obj=$(config__repo__get "$repo")
+		cells+=("$repo")
+		cells+=("$(config__repo__obj_get_originurl "$repo_obj")")
+		cells+=("$(config__repo__obj_get_directory "$repo_obj")")
+	done
+
+	print_table_horizontally 3 "repo" "origin" "directory" "${cells[@]+"${cells[@]}"}"
 }
 
 repo__pull() {
