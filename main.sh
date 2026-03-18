@@ -761,30 +761,10 @@ If no repositories are specified, pulls all registered repositories.
 
 	debug "$*"
 	repo__validate_all
-
-	local repos_to_pull=()
-	if [[ $# -eq 0 ]]; then
-		repos_to_pull=($(config__repo__list))
-	else
-		repos_to_pull=("$@")
-	fi
-
-	if [[ ${#repos_to_pull[@]} -eq 0 ]]; then
-		warn "No repositories registered."
-		return 0
-	fi
-
-	for repo_name in "${repos_to_pull[@]}"; do
-		local repo_obj repo_dir
-		repo_obj=$(config__repo__get "$repo_name")
-		repo_dir=$(config__repo__obj_get_directory "$repo_obj")
-		if [[ -z "$repo_dir" || ! -d "$repo_dir" ]]; then
-			warn "Repository '$repo_name' not found, skipping."
-			continue
-		fi
-		info "Pulling '$repo_name'..."
-		git__pull "$repo_dir" || true
+	for name in "$@"; do 
+		validate_name "$name" "repo name";
 	done
+	repo__pull "$@"
 }
 
 cmd__repo__reset_to_origin() {
@@ -799,30 +779,10 @@ If no repositories are specified, resets all registered repositories.
 
 	debug "$*"
 	repo__validate_all
-
-	local repos=()
-	if [[ $# -eq 0 ]]; then
-		repos=($(config__repo__list))
-	else
-		repos=("$@")
-	fi
-
-	if [[ ${#repos[@]} -eq 0 ]]; then
-		warn "No repositories registered."
-		return 0
-	fi
-
-	for repo_name in "${repos[@]}"; do
-		local repo_obj repo_dir
-		repo_obj=$(config__repo__get "$repo_name")
-		repo_dir=$(config__repo__obj_get_directory "$repo_obj")
-		if [[ -z "$repo_dir" || ! -d "$repo_dir" ]]; then
-			warn "Repository '$repo_name' not found, skipping."
-			continue
-		fi
-		info "Resetting '$repo_name' to origin..."
-		git__reset_to_origin "$repo_dir" || true
+	for name in "$@";
+		do validate_name "$name" "repo name";
 	done
+	repo__reset_to_origin "$@"
 }
 
 cmd__repo__set_post_copy_hook() {
@@ -838,34 +798,9 @@ Typically this will be run after adding a repo to a workspace.
 	repo__validate_all
 
 	local repo="${1:?"Repo name is required.$USAGE"}"
-	local repo_obj
-	if ! repo_obj="$(config__repo__get "$repo")"; then
-		fatal "Repo $repo does not exist."
-	fi
-	local repo_post_copy_hook
-	repo_post_copy_hook="$(config__repo__obj_get_post_copy_hook "$repo_obj")"
+	validate_name "$repo" "repo name"
 
-	if [[ -z "$repo_post_copy_hook" ]]; then
-		repo_post_copy_hook="$REPO_POST_COPY_HOOK_DEFAULT_VALUE"
-	fi
-
-	local global_obj
-	global_obj="$(config__global__get)"
-	local global_editor
-	global_editor="$(config__global__obj_get_editor "$global_obj")"
-
-	local tempfile
-	tempfile="$(fs__tempfile__safe_create)"
-	# NOTE: tempfile may leak if interrupted (e.g., Ctrl+C). Cannot use trap here
-	# as it would conflict with the config file lock's EXIT trap.
-	fs__tempfile__write "$tempfile" "$repo_post_copy_hook"
-	fs__tempfile__open "$tempfile" "$global_editor"
-
-	repo_post_copy_hook="$(fs__tempfile__read "$tempfile")"
-	fs__tempfile__clean "$tempfile"
-
-	repo_obj="$(config__repo__obj_set_post_copy_hook "$repo_obj" "$repo_post_copy_hook")"
-	config__repo__put "$repo" "$repo_obj"
+	repo__set_post_copy_hook "$repo"
 }
 
 ###########################
@@ -1509,6 +1444,90 @@ repo__remove() {
 	config__repo__delete_idempotent "$repo_name"
 
 	echo "Repository $repo_name removed successfully."
+}
+
+repo__pull() {
+	local repos_to_pull=()
+	if [[ $# -eq 0 ]]; then
+		repos_to_pull=($(config__repo__list))
+	else
+		repos_to_pull=("$@")
+	fi
+
+	if [[ ${#repos_to_pull[@]} -eq 0 ]]; then
+		warn "No repositories registered."
+		return 0
+	fi
+
+	for repo_name in "${repos_to_pull[@]}"; do
+		local repo_obj repo_dir
+		repo_obj=$(config__repo__get "$repo_name")
+		repo_dir=$(config__repo__obj_get_directory "$repo_obj")
+		if [[ -z "$repo_dir" || ! -d "$repo_dir" ]]; then
+			warn "Repository '$repo_name' not found, skipping."
+			continue
+		fi
+		info "Pulling '$repo_name'..."
+		git__pull "$repo_dir" || true
+	done
+}
+
+repo__reset_to_origin() {
+	local repos=()
+	if [[ $# -eq 0 ]]; then
+		repos=($(config__repo__list))
+	else
+		repos=("$@")
+	fi
+
+	if [[ ${#repos[@]} -eq 0 ]]; then
+		warn "No repositories registered."
+		return 0
+	fi
+
+	for repo_name in "${repos[@]}"; do
+		local repo_obj repo_dir
+		repo_obj=$(config__repo__get "$repo_name")
+		repo_dir=$(config__repo__obj_get_directory "$repo_obj")
+		if [[ -z "$repo_dir" || ! -d "$repo_dir" ]]; then
+			warn "Repository '$repo_name' not found, skipping."
+			continue
+		fi
+		info "Resetting '$repo_name' to origin..."
+		git__reset_to_origin "$repo_dir" || true
+	done
+}
+
+repo__set_post_copy_hook() {
+	local repo="${1:?}"
+	local repo_obj
+	if ! repo_obj="$(config__repo__get "$repo")"; then
+		fatal "Repo $repo does not exist."
+	fi
+	local repo_post_copy_hook
+	repo_post_copy_hook="$(config__repo__obj_get_post_copy_hook "$repo_obj")"
+
+	if [[ -z "$repo_post_copy_hook" ]]; then
+		repo_post_copy_hook="$REPO_POST_COPY_HOOK_DEFAULT_VALUE"
+	fi
+
+	local global_obj
+	global_obj="$(config__global__get)"
+	local global_editor
+	global_editor="$(config__global__obj_get_editor "$global_obj")"
+
+	local tempfile
+	tempfile="$(fs__tempfile__safe_create)"
+	# NOTE: tempfile may leak if interrupted (e.g., Ctrl+C). Cannot use trap here
+	# as it would conflict with the config file lock's EXIT trap.
+	fs__tempfile__write "$tempfile" "$repo_post_copy_hook"
+	fs__tempfile__open "$tempfile" "$global_editor"
+
+	repo_post_copy_hook="$(fs__tempfile__read "$tempfile")"
+	fs__tempfile__clean "$tempfile"
+
+	repo_obj="$(config__repo__obj_set_post_copy_hook "$repo_obj" "$repo_post_copy_hook")"
+	config__repo__put "$repo" "$repo_obj"
 }
 
 ###############################
