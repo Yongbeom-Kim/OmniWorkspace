@@ -72,7 +72,8 @@ tests:
       export PROJ_DIR="$HOME/.ows"
       export REPOS_DIR="$PROJ_DIR/repos"
       export WORKSPACES_DIR="$PROJ_DIR/workspaces"
-      eval "$(head -n 2395 /usr/local/bin/ows)"
+      # Source ows functions without invoking main (which acquires a lock and sets traps)
+      eval "$(sed '/^main "\$@"$/d' /usr/local/bin/ows)"
       config__create_file_if_not_exist
       editor=$(config__global__obj_get_editor "$(config__global__get)")
       if [ "$editor" != "vi" ]; then
