@@ -154,8 +154,10 @@ tests:
         echo "FAIL: repo should be removed from config, got: $entry" >&2
         exit 1
       fi
-      # NOTE: directory cleanup may fail on some platforms (realpath -m issue)
-      # Config removal is the critical check
+      if [ -d ~/.ows/repos/Hello-World ]; then
+        echo "FAIL: repo directory should be removed" >&2
+        exit 1
+      fi
 
   - name: "Can list repos"
     prepare:
@@ -215,8 +217,10 @@ tests:
         echo "FAIL: workspace should be removed from config, got: $entry" >&2
         exit 1
       fi
-      # NOTE: directory cleanup may fail on some platforms (realpath -m issue)
-      # Config removal is the critical check
+      if [ -d ~/.ows/workspaces/delete-test ]; then
+        echo "FAIL: workspace directory should be removed" >&2
+        exit 1
+      fi
 
   - name: "Can remove repo from workspace"
     prepare:
