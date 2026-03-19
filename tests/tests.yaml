@@ -58,26 +58,19 @@ tests:
       # Verify by adding it to a workspace (which reads the repo config)
       ows workspace add dir-default-test Hello-World
 
-  - name: "Global editor defaults to vi"
+  - name: "Global editor not stored explicitly (sparse storage)"
     prepare:
     |-
-      true
+      ows repo add https://github.com/octocat/Hello-World.git
     test:
     |-
-      # No global config set yet - editor should default
       true
     verify:
     |-
-      # Source ows to access internal functions and verify editor default
-      export PROJ_DIR="$HOME/.ows"
-      export REPOS_DIR="$PROJ_DIR/repos"
-      export WORKSPACES_DIR="$PROJ_DIR/workspaces"
-      # Source ows functions without invoking main (which acquires a lock and sets traps)
-      eval "$(sed '/^main "\$@"$/d' /usr/local/bin/ows)"
-      config__create_file_if_not_exist
-      editor=$(config__global__obj_get_editor "$(config__global__get)")
-      if [ "$editor" != "vi" ]; then
-        echo "FAIL: expected editor=vi, got: $editor" >&2
+      # After initializing config, editor should NOT be stored (sparse storage)
+      editor=$(yq -r '.global.editor' ~/.ows/config.yaml)
+      if [ "$editor" != "null" ] && [ -n "$editor" ]; then
+        echo "FAIL: editor should not be stored in config (sparse storage), got: $editor" >&2
         exit 1
       fi
 
@@ -129,5 +122,310 @@ tests:
       repo_count=$(yq '.workspaces.multi-repo-test.repos | length' ~/.ows/config.yaml)
       if [ "$repo_count" != "2" ]; then
         echo "FAIL: expected 2 repos, got: $repo_count" >&2
+        exit 1
+      fi
+
+  - name: "Can add repo with custom name"
+    prepare:
+    |-
+      true
+    test:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git my-custom-name
+    verify:
+    |-
+      url=$(yq -r '.repos.my-custom-name.origin_url' ~/.ows/config.yaml)
+      if [ "$url" != "https://github.com/octocat/Hello-World.git" ]; then
+        echo "FAIL: expected custom repo name with correct URL, got: $url" >&2
+        exit 1
+      fi
+
+  - name: "Can remove a repo"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+    test:
+    |-
+      ows repo remove Hello-World
+    verify:
+    |-
+      entry=$(yq -r '.repos.Hello-World' ~/.ows/config.yaml)
+      if [ "$entry" != "null" ]; then
+        echo "FAIL: repo should be removed from config, got: $entry" >&2
+        exit 1
+      fi
+      if [ -d ~/.ows/repos/Hello-World ]; then
+        echo "FAIL: repo directory should be removed" >&2
+        exit 1
+      fi
+
+  - name: "Can list repos"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows repo add https://github.com/octocat/Spoon-Knife.git
+    test:
+    |-
+      true
+    verify:
+    |-
+      ows repos | grep -q Hello-World
+      ows repos | grep -q Spoon-Knife
+
+  - name: "Can pull repos"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+    test:
+    |-
+      ows repo pull Hello-World
+    verify:
+    |-
+      true
+
+  - name: "Can create empty workspace"
+    prepare:
+    |-
+      true
+    test:
+    |-
+      ows workspace add empty-ws
+    verify:
+    |-
+      entry=$(yq -r '.workspaces.empty-ws' ~/.ows/config.yaml)
+      if [ "$entry" = "null" ]; then
+        echo "FAIL: workspace should exist in config" >&2
+        exit 1
+      fi
+      if [ ! -d ~/.ows/workspaces/empty-ws ]; then
+        echo "FAIL: workspace directory should exist" >&2
+        exit 1
+      fi
+
+  - name: "Can delete a workspace"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows workspace add delete-test Hello-World
+    test:
+    |-
+      ows workspace delete delete-test
+    verify:
+    |-
+      entry=$(yq -r '.workspaces.delete-test' ~/.ows/config.yaml)
+      if [ "$entry" != "null" ]; then
+        echo "FAIL: workspace should be removed from config, got: $entry" >&2
+        exit 1
+      fi
+      if [ -d ~/.ows/workspaces/delete-test ]; then
+        echo "FAIL: workspace directory should be removed" >&2
+        exit 1
+      fi
+
+  - name: "Can remove repo from workspace"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows repo add https://github.com/octocat/Spoon-Knife.git
+      ows workspace add remove-repo-test Hello-World Spoon-Knife
+    test:
+    |-
+      ows workspace remove-repo remove-repo-test Hello-World
+    verify:
+    |-
+      repo_count=$(yq '.workspaces.remove-repo-test.repos | length' ~/.ows/config.yaml)
+      if [ "$repo_count" != "1" ]; then
+        echo "FAIL: expected 1 repo remaining, got: $repo_count" >&2
+        exit 1
+      fi
+      remaining=$(yq -r '.workspaces.remove-repo-test.repos[0]' ~/.ows/config.yaml)
+      if [ "$remaining" != "Spoon-Knife" ]; then
+        echo "FAIL: expected Spoon-Knife to remain, got: $remaining" >&2
+        exit 1
+      fi
+      if [ -d ~/.ows/workspaces/remove-repo-test/Hello-World ]; then
+        echo "FAIL: Hello-World worktree dir should be removed" >&2
+        exit 1
+      fi
+      if [ ! -d ~/.ows/workspaces/remove-repo-test/Spoon-Knife ]; then
+        echo "FAIL: Spoon-Knife worktree dir should still exist" >&2
+        exit 1
+      fi
+
+  - name: "Can checkout branch across workspace"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows workspace add branch-test Hello-World
+    test:
+    |-
+      ows workspace checkout branch-test my-feature
+    verify:
+    |-
+      branch=$(yq -r '.workspaces.branch-test.branch' ~/.ows/config.yaml)
+      if [ "$branch" != "my-feature" ]; then
+        echo "FAIL: expected branch=my-feature in config, got: $branch" >&2
+        exit 1
+      fi
+      # Verify actual git branch in worktree
+      actual_branch=$(cd ~/.ows/workspaces/branch-test/Hello-World && git rev-parse --abbrev-ref HEAD)
+      if [ "$actual_branch" != "my-feature" ]; then
+        echo "FAIL: expected git branch=my-feature, got: $actual_branch" >&2
+        exit 1
+      fi
+
+  - name: "Checkout with -b flag works"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows workspace add flag-test Hello-World
+    test:
+    |-
+      ows workspace checkout flag-test -b my-feature-b
+    verify:
+    |-
+      branch=$(yq -r '.workspaces.flag-test.branch' ~/.ows/config.yaml)
+      if [ "$branch" != "my-feature-b" ]; then
+        echo "FAIL: expected branch=my-feature-b in config, got: $branch" >&2
+        exit 1
+      fi
+      actual_branch=$(cd ~/.ows/workspaces/flag-test/Hello-World && git rev-parse --abbrev-ref HEAD)
+      if [ "$actual_branch" != "my-feature-b" ]; then
+        echo "FAIL: expected git branch=my-feature-b, got: $actual_branch" >&2
+        exit 1
+      fi
+
+  - name: "Can pull workspace"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows workspace add pull-test Hello-World
+    test:
+    |-
+      ows workspace pull pull-test
+    verify:
+    |-
+      true
+
+  - name: "Exec runs command in workspace directory"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows repo add https://github.com/octocat/Spoon-Knife.git
+      ows workspace add exec-test Hello-World Spoon-Knife
+    test:
+    |-
+      ows workspace exec exec-test ls
+    verify:
+    |-
+      # Exec runs in workspace root; verify repo subdirectories are listed
+      output=$(ows workspace exec exec-test ls)
+      echo "$output" | grep -q Hello-World
+      echo "$output" | grep -q Spoon-Knife
+
+  - name: "Post-copy hooks run on workspace add"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      # Write a post-copy hook that creates a marker file
+      # Hook is stored as a YAML array: ["script"]
+      yq -i '.repos.Hello-World.post-copy-hook = ["touch .hook-ran"]' ~/.ows/config.yaml
+    test:
+    |-
+      ows workspace add hook-test Hello-World
+    verify:
+    |-
+      if [ ! -f ~/.ows/workspaces/hook-test/Hello-World/.hook-ran ]; then
+        echo "FAIL: post-copy hook marker file not found" >&2
+        exit 1
+      fi
+
+  - name: "Shortcut aliases work"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows workspace add alias-test Hello-World
+    test:
+    |-
+      ows wss
+      ows rs
+      ows co alias-test some-branch
+    verify:
+    |-
+      # Verify checkout alias actually worked
+      branch=$(yq -r '.workspaces.alias-test.branch' ~/.ows/config.yaml)
+      if [ "$branch" != "some-branch" ]; then
+        echo "FAIL: expected branch=some-branch after alias checkout, got: $branch" >&2
+        exit 1
+      fi
+
+  - name: "Invalid workspace name is rejected"
+    prepare:
+    |-
+      true
+    test:
+    |-
+      ! ows workspace add "invalid name with spaces"
+    verify:
+    |-
+      true
+
+  - name: "Unknown command is rejected"
+    prepare:
+    |-
+      true
+    test:
+    |-
+      ! ows foobar
+    verify:
+    |-
+      true
+
+  - name: "Removing non-existent repo from workspace errors"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows workspace add graceful-test Hello-World
+    test:
+    |-
+      ! ows workspace remove-repo graceful-test nonexistent-repo
+    verify:
+    |-
+      # Workspace should still be intact despite the error
+      entry=$(yq -r '.workspaces.graceful-test' ~/.ows/config.yaml)
+      if [ "$entry" = "null" ]; then
+        echo "FAIL: workspace should still exist after failed remove" >&2
+        exit 1
+      fi
+
+  - name: "Adding same repo twice is idempotent"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+    test:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+    verify:
+    |-
+      # Should still have exactly one Hello-World entry with correct URL
+      url=$(yq -r '.repos.Hello-World.origin_url' ~/.ows/config.yaml)
+      if [ "$url" != "https://github.com/octocat/Hello-World.git" ]; then
+        echo "FAIL: expected correct URL after double add, got: $url" >&2
+        exit 1
+      fi
+
+  - name: "Adding repo to workspace twice is idempotent"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows workspace add idempotent-test Hello-World
+    test:
+    |-
+      ows workspace add idempotent-test Hello-World
+    verify:
+    |-
+      repo_count=$(yq '.workspaces.idempotent-test.repos | length' ~/.ows/config.yaml)
+      if [ "$repo_count" != "1" ]; then
+        echo "FAIL: expected 1 repo after double add, got: $repo_count" >&2
         exit 1
       fi

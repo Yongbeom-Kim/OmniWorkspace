@@ -2199,6 +2199,17 @@ fs__release_lock() {
 	fi
 }
 
+# Portable realpath
+# macOS realpath lacks -m flag, and fails for nonexistent file/dirs
+fs__resolve_path() {
+	local target="$1"
+	if realpath "$target" 2>/dev/null; then
+		return
+	fi
+
+	echo "$(fs__resolve_path "$(dirname "$target")")/$(basename "$target")"
+}
+
 fs__safe_rm_rf() {
 	debug "$*"
 	local target="$1"
@@ -2209,11 +2220,10 @@ fs__safe_rm_rf() {
 		exit 1
 	fi
 
-	# Resolve paths (use -m to allow non-existent targets)
 	local resolved
-	resolved="$(realpath -m "$target" 2>/dev/null || echo "$target")"
+	resolved="$(fs__resolve_path "$target")"
 	local resolved_parent
-	resolved_parent="$(realpath "$allowed_parent" 2>/dev/null || echo "$allowed_parent")"
+	resolved_parent="$(fs__resolve_path "$allowed_parent")"
 
 	if [[ "$resolved" != "$resolved_parent"/* ]]; then
 		echo "[FATAL] Refusing to delete '$resolved' — not under '$resolved_parent'" >&2
