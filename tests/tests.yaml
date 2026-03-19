@@ -1,6 +1,6 @@
 tests:
   - name: "Can add empty repo to workspace"
-    prepare: 
+    prepare:
     |-
       ows repo add git@github.com:Yongbeom-Kim/OmniWorkspace-test-empty-repo.git
     test:
@@ -9,4 +9,124 @@ tests:
     verify:
     |-
       true
-    
+
+  - name: "Can add public repo via HTTPS and create workspace"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+    test:
+    |-
+      ows workspace add hello-workspace Hello-World
+    verify:
+    |-
+      ows workspaces | grep -q hello-workspace
+      ows repos | grep -q Hello-World
+
+  - name: "Workspace defaults are applied on read"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows workspace add defaults-test Hello-World
+    test:
+    |-
+      # Manually strip the branch field from config to simulate a sparse config
+      yq -i 'del(.workspaces.defaults-test.branch)' ~/.ows/config.yaml
+    verify:
+    |-
+      # After stripping branch, reading the workspace should fill in the default (workspace name)
+      branch=$(yq -r '.workspaces."defaults-test".branch' ~/.ows/config.yaml)
+      if [ "$branch" != "null" ] && [ -n "$branch" ]; then
+        echo "FAIL: branch should be missing from YAML (sparse storage), got: $branch" >&2
+        exit 1
+      fi
+      # But the ows tool should report the workspace with default branch applied
+      # Verify workspace still works by adding another repo
+      ows repo add https://github.com/octocat/Spoon-Knife.git
+      ows workspace add defaults-test Spoon-Knife
+
+  - name: "Repo defaults fill in missing directory"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+    test:
+    |-
+      # Manually strip the dir field from repo config
+      yq -i 'del(.repos.Hello-World.dir)' ~/.ows/config.yaml
+    verify:
+    |-
+      # The repo should still be usable (dir default fills in on read)
+      # Verify by adding it to a workspace (which reads the repo config)
+      ows workspace add dir-default-test Hello-World
+
+  - name: "Global editor defaults to vi"
+    prepare:
+    |-
+      true
+    test:
+    |-
+      # No global config set yet - editor should default
+      true
+    verify:
+    |-
+      # Source ows to access internal functions and verify editor default
+      export PROJ_DIR="$HOME/.ows"
+      export REPOS_DIR="$PROJ_DIR/repos"
+      export WORKSPACES_DIR="$PROJ_DIR/workspaces"
+      eval "$(head -n 2395 /usr/local/bin/ows)"
+      config__create_file_if_not_exist
+      editor=$(config__global__obj_get_editor "$(config__global__get)")
+      if [ "$editor" != "vi" ]; then
+        echo "FAIL: expected editor=vi, got: $editor" >&2
+        exit 1
+      fi
+
+  - name: "Null config values replaced by defaults"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows workspace add null-test Hello-World
+    test:
+    |-
+      # Set branch to explicit null in YAML
+      yq -i '.workspaces.null-test.branch = null' ~/.ows/config.yaml
+    verify:
+    |-
+      # Workspace should still be usable - null branch gets replaced by default
+      # Adding another repo exercises config__workspace__get which merges defaults
+      ows repo add https://github.com/octocat/Spoon-Knife.git
+      ows workspace add null-test Spoon-Knife
+
+  - name: "Explicit config values override defaults"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows workspace add explicit-test Hello-World
+    test:
+    |-
+      # Set a custom branch name
+      ows workspace checkout explicit-test custom-branch-name
+    verify:
+    |-
+      # Verify the custom branch was preserved (not overwritten by default)
+      branch=$(yq -r '.workspaces.explicit-test.branch' ~/.ows/config.yaml)
+      if [ "$branch" != "custom-branch-name" ]; then
+        echo "FAIL: expected branch=custom-branch-name, got: $branch" >&2
+        exit 1
+      fi
+
+  - name: "Multiple repos in one workspace"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows repo add https://github.com/octocat/Spoon-Knife.git
+    test:
+    |-
+      ows workspace add multi-repo-test Hello-World Spoon-Knife
+    verify:
+    |-
+      # Verify both repos are in the workspace
+      repo_count=$(yq '.workspaces.multi-repo-test.repos | length' ~/.ows/config.yaml)
+      if [ "$repo_count" != "2" ]; then
+        echo "FAIL: expected 2 repos, got: $repo_count" >&2
+        exit 1
+      fi

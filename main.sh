@@ -1544,8 +1544,20 @@ repo__set_post_copy_hook() {
 
 config__global__get() {
 	debug "$*"
+	config__create_file_if_not_exist
 
-	yq -r ".[\"${GLOBAL_KEY}\"]" "$CONFIG_FILE_PATH" # Returning null is expected if no global config
+	local result
+	result=$(yq -r ".[\"${GLOBAL_KEY}\"]" "$CONFIG_FILE_PATH")
+
+	local defaults
+	defaults=$(config__global__obj_defaults)
+	if [[ "$result" == "null" || -z "$result" ]]; then
+		echo "$defaults"
+		return
+	fi
+	# Merge: defaults (base) * stored (override) -- stored wins
+	result=$(echo "$result" | yq 'del(.. | select(. == null))')
+	echo "$defaults" | result="$result" yq '. * env(result)'
 }
 
 config__global__put() {
@@ -1559,14 +1571,7 @@ config__global__obj_get_editor() {
 	debug "$*"
 	local global_obj="${1:?}"
 
-	local result
-	result="$(echo "$global_obj" | yq -r ".[\"${GLOBAL_EDITOR_KEY}\"]")"
-	if [[ -z "$result" || "$result" == "null" ]]; then
-		# TODO: respect $VISUAL and $EDITOR environment variables
-		echo "$GLOBAL_EDITOR_DEFAULT_VALUE"
-		return
-	fi
-	echo "$result"
+	echo "$global_obj" | yq -r ".[\"${GLOBAL_EDITOR_KEY}\"]" | yq__normalize_null
 }
 
 config__global__obj_set_editor() {
@@ -1575,6 +1580,13 @@ config__global__obj_set_editor() {
 	local editor="${2:?}"
 
 	echo "${global_obj}" | editor="${editor}" yq ".[\"${GLOBAL_EDITOR_KEY}\"] = env(editor)"
+}
+
+config__global__obj_defaults() {
+	echo "{
+		\"${GLOBAL_EDITOR_KEY}\": \"${GLOBAL_EDITOR_DEFAULT_VALUE}\"
+	}" | yq '.'
+	# TODO: respect $VISUAL and $EDITOR environment variables
 }
 
 #############################
@@ -1593,14 +1605,13 @@ config__workspace__get() {
 		return 1
 	fi
 
-	# Default branch name = workspace name
-	local branch
-	branch=$(echo "$result" | yq -r ".[\"${WORKSPACE_BRANCH_KEY}\"]")
-	if [[ -z "$branch" || "$branch" == "null" ]]; then
-		result=$(echo "$result" | yq -r ".[\"${WORKSPACE_BRANCH_KEY}\"] = \"${workspace_name}\"")
-	fi
-
-	echo "$result"
+	# Merge: defaults (base) * stored (override) -- stored wins
+	local workspace_dir
+	workspace_dir="$(fs__workspace_get_dir "$workspace_name")"
+	local defaults
+	defaults=$(config__workspace__obj_defaults "$workspace_name" "$workspace_dir")
+	result=$(echo "$result" | yq 'del(.. | select(. == null))')
+	echo "$defaults" | result="$result" yq '. * env(result)'
 }
 
 config__workspace__put() {
@@ -1666,6 +1677,13 @@ config__workspace__delete_idempotent() {
 }
 
 config__workspace__obj_create() {
+	debug "$*"
+	local workspace_name="${1:?}" workspace_dir="${2:?}"
+
+	config__workspace__obj_defaults "$workspace_name" "$workspace_dir"
+}
+
+config__workspace__obj_defaults() {
 	debug "$*"
 	local workspace_name="${1:?}" workspace_dir="${2:?}"
 
@@ -1777,16 +1795,36 @@ config__repo__get() {
 	if [[ "$result" == "null" ]]; then
 		return 1
 	fi
-	echo "$result"
+
+	# Merge: defaults (base) * stored (override) -- stored wins
+	local defaults
+	defaults=$(config__repo__obj_defaults "$repo_name")
+	result=$(echo "$result" | yq 'del(.. | select(. == null))')
+	echo "$defaults" | result="$result" yq '. * env(result)'
 }
 
 config__repo__obj_create() {
 	local repo_originurl="${1:?}" repo_dir="${2:?}"
+	local repo_name
+	repo_name="$(basename "$repo_dir")"
+	# Factory default dir gets overwritten by explicit repo_dir from caller
+	local defaults
+	defaults=$(config__repo__obj_defaults "$repo_name")
+	echo "$defaults" | \
+		repo_originurl="$repo_originurl" repo_dir="$repo_dir" \
+		yq ". * {\"${REPO_ORIGINURL_KEY}\": env(repo_originurl), \"${REPO_DIRECTORY_KEY}\": env(repo_dir)}"
+}
+
+config__repo__obj_defaults() {
+	debug "$*"
+	local repo_name="${1:?}"
+
+	local repo_dir
+	repo_dir="$(const__get_repo_dir "$repo_name")"
 
 	echo "{
-        \"$REPO_ORIGINURL_KEY\": \"$repo_originurl\",
-        \"$REPO_DIRECTORY_KEY\": \"$repo_dir\"
-    }" | yq '.'
+		\"${REPO_DIRECTORY_KEY}\": \"${repo_dir}\"
+	}" | yq '.'
 }
 
 config__repo__obj_set_directory() {
