@@ -57,6 +57,9 @@ brew install git yq
 
 # Install ows
 curl -fsSL https://raw.githubusercontent.com/Yongbeom-Kim/OmniWorkspace/refs/heads/main/main.sh | sudo tee /usr/local/bin/ows > /dev/null && sudo chmod +x /usr/local/bin/ows
+
+# Get the autocomplete
+ows install
 ```
 
 **For development**, clone the repo and symlink instead:
