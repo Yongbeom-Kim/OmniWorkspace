@@ -429,3 +429,88 @@ tests:
         echo "FAIL: expected 1 repo after double add, got: $repo_count" >&2
         exit 1
       fi
+
+  - name: "Two workspaces with different repos can share a branch"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows repo add https://github.com/octocat/Spoon-Knife.git
+      ows workspace add share-branch-a Hello-World
+      ows workspace add share-branch-b Spoon-Knife
+      ows workspace checkout share-branch-a dev
+    test:
+    |-
+      ows workspace checkout share-branch-b dev
+    verify:
+    |-
+      branch_a=$(yq -r '.workspaces.share-branch-a.branch' ~/.ows/config.yaml)
+      branch_b=$(yq -r '.workspaces.share-branch-b.branch' ~/.ows/config.yaml)
+      if [ "$branch_a" != "dev" ]; then
+        echo "FAIL: expected share-branch-a branch=dev, got: $branch_a" >&2
+        exit 1
+      fi
+      if [ "$branch_b" != "dev" ]; then
+        echo "FAIL: expected share-branch-b branch=dev, got: $branch_b" >&2
+        exit 1
+      fi
+      actual_a=$(cd ~/.ows/workspaces/share-branch-a/Hello-World && git rev-parse --abbrev-ref HEAD)
+      actual_b=$(cd ~/.ows/workspaces/share-branch-b/Spoon-Knife && git rev-parse --abbrev-ref HEAD)
+      if [ "$actual_a" != "dev" ]; then
+        echo "FAIL: expected Hello-World git branch=dev, got: $actual_a" >&2
+        exit 1
+      fi
+      if [ "$actual_b" != "dev" ]; then
+        echo "FAIL: expected Spoon-Knife git branch=dev, got: $actual_b" >&2
+        exit 1
+      fi
+
+  - name: "Two workspaces sharing a repo cannot use the same branch"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows repo add https://github.com/octocat/Spoon-Knife.git
+      ows workspace add conflict-a Hello-World Spoon-Knife
+      ows workspace add conflict-b Hello-World
+      ows workspace checkout conflict-a dev
+    test:
+    |-
+      # Capture stderr to verify repo-specific error message
+      output=$(ows workspace checkout conflict-b dev 2>&1) && exit 1 || true
+      echo "$output" | grep -q "Hello-World"
+    verify:
+    |-
+      # Config should still have the old branch (workspace name as default)
+      branch=$(yq -r '.workspaces.conflict-b.branch' ~/.ows/config.yaml)
+      if [ "$branch" = "dev" ]; then
+        echo "FAIL: conflict-b branch should NOT be dev after failed checkout" >&2
+        exit 1
+      fi
+
+  - name: "Checkout rolls back on partial failure"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows repo add https://github.com/octocat/Spoon-Knife.git
+      ows workspace add rollback-test Hello-World Spoon-Knife
+      # Corrupt the Spoon-Knife worktree .git file so git checkout will fail
+      cp ~/.ows/workspaces/rollback-test/Spoon-Knife/.git ~/.ows/workspaces/rollback-test/Spoon-Knife/.git.bak
+      echo "garbage" > ~/.ows/workspaces/rollback-test/Spoon-Knife/.git
+    test:
+    |-
+      ! ows workspace checkout rollback-test my-rollback-branch
+    verify:
+    |-
+      # Restore .git file for cleanup
+      mv ~/.ows/workspaces/rollback-test/Spoon-Knife/.git.bak ~/.ows/workspaces/rollback-test/Spoon-Knife/.git
+      # Config branch should still be the default (workspace name), not the new branch
+      branch=$(yq -r '.workspaces.rollback-test.branch' ~/.ows/config.yaml)
+      if [ "$branch" = "my-rollback-branch" ]; then
+        echo "FAIL: config branch should not be my-rollback-branch after failed checkout" >&2
+        exit 1
+      fi
+      # Hello-World should still be on its original branch (not my-rollback-branch)
+      actual_branch=$(cd ~/.ows/workspaces/rollback-test/Hello-World && git rev-parse --abbrev-ref HEAD)
+      if [ "$actual_branch" = "my-rollback-branch" ]; then
+        echo "FAIL: Hello-World should have been rolled back, but is on my-rollback-branch" >&2
+        exit 1
+      fi
