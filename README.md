@@ -49,7 +49,7 @@ And you can do `ows workspace cd my-feature` to cd into the workspace, or `ows w
 
 ## Installation
 
-**Dependencies:** `git`, [`yq`](https://github.com/mikefarah/yq)
+**Dependencies:** `git`, [`yq`](https://github.com/mikefarah/yq), `base64`
 
 ```bash
 # macOS

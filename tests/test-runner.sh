@@ -57,14 +57,17 @@ build_image() {
 }
 
 # Run a single hook inside the container
+# When VERBOSE=1, output is captured to a temp file (displayed later on failure)
+# When VERBOSE=0, output is discarded
 run_hook() {
     local container="$1"
     local hook_name="$2"
     local hook_body="$3"
+    local output_file="${4:-}"
 
     if [[ "$VERBOSE" -eq 1 ]]; then
-        echo "  [$hook_name] $hook_body"
-        docker exec "$container" bash -c "$hook_body"
+        echo "  [$hook_name] $hook_body" >> "$output_file"
+        docker exec "$container" bash -c "$hook_body" >> "$output_file" 2>&1
     else
         docker exec "$container" bash -c "$hook_body" &>/dev/null
     fi
@@ -99,10 +102,12 @@ run_tests() {
         local test_passed=1
 
         # Print test header
+        printf "[%d/%d] %s ... " "$((i + 1))" "$test_count" "$name"
+
+        # Create temp file for capturing output in verbose mode
+        local output_file=""
         if [[ "$VERBOSE" -eq 1 ]]; then
-            echo "[$((i + 1))/$test_count] $name"
-        else
-            printf "[%d/%d] %s ... " "$((i + 1))" "$test_count" "$name"
+            output_file=$(mktemp)
         fi
 
         # Clean up stale container
@@ -115,19 +120,19 @@ run_tests() {
 
         # Run hooks (short-circuit on failure)
         if [[ "$test_passed" -eq 1 ]] && [[ "$prepare" != "null" ]]; then
-            if ! run_hook "$container_name" "prepare" "$prepare"; then
+            if ! run_hook "$container_name" "prepare" "$prepare" "$output_file"; then
                 test_passed=0
             fi
         fi
 
         if [[ "$test_passed" -eq 1 ]] && [[ "$test_cmd" != "null" ]]; then
-            if ! run_hook "$container_name" "test" "$test_cmd"; then
+            if ! run_hook "$container_name" "test" "$test_cmd" "$output_file"; then
                 test_passed=0
             fi
         fi
 
         if [[ "$test_passed" -eq 1 ]] && [[ "$verify" != "null" ]]; then
-            if ! run_hook "$container_name" "verify" "$verify"; then
+            if ! run_hook "$container_name" "verify" "$verify" "$output_file"; then
                 test_passed=0
             fi
         fi
@@ -138,18 +143,21 @@ run_tests() {
         # Report result
         if [[ "$test_passed" -eq 1 ]]; then
             passed=$((passed + 1))
-            if [[ "$VERBOSE" -eq 1 ]]; then
-                echo "  PASS"
-            else
-                echo "PASS"
-            fi
+            echo "PASS"
         else
             failed=$((failed + 1))
-            if [[ "$VERBOSE" -eq 1 ]]; then
-                echo "  FAIL"
-            else
-                echo "FAIL"
+            echo "FAIL"
+            # In verbose mode, dump captured output for failed tests
+            if [[ "$VERBOSE" -eq 1 ]] && [[ -n "$output_file" ]] && [[ -s "$output_file" ]]; then
+                echo "  --- output ---"
+                sed 's/^/  /' "$output_file"
+                echo "  --- end ---"
             fi
+        fi
+
+        # Clean up temp file
+        if [[ -n "$output_file" ]]; then
+            rm -f "$output_file"
         fi
     done
 
