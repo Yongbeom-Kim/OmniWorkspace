@@ -125,13 +125,18 @@ ows workspace run-hooks <name>                 # Run post-copy hooks for all rep
 Layers let you snapshot and restore the non-repo files in a workspace (config files, notes, scripts — anything that isn't inside a git repo directory). This is useful for switching between different workspace configurations without losing setup.
 
 ```bash
-ows layer save <workspace> <layer_name>    # Snapshot non-repo files into a named layer
+ows layer save <workspace> [<layer_name>] [--desc "description"]
+                                           # Snapshot non-repo files into a named layer
 ows layer load <workspace> <layer_name>    # Restore a layer (clears existing non-repo files first)
-ows layer list                             # List all saved layers
+ows layer list                             # List all saved layers with descriptions
+ows layer set-description <layer_name> "description"
+                                           # Set description for an existing layer
 ows layer delete <layer_name>              # Delete a saved layer
 ```
 
-`layer` can also be accessed as a workspace subcommand (`ows workspace layer save ...`) and can be shortened to `l`.
+`layer` can also be accessed as a workspace subcommand (`ows workspace layer save ...`) and can be shortened to `l`. `set-description` can be shortened to `set-desc`.
+
+When saving a layer, you can attach a description with `--desc`. If omitted, the existing description is preserved (or defaults to the layer name for new layers).
 
 When loading a layer, existing non-repo files in the workspace are cleared before the layer's files are written. Repo directories are never touched.
 
