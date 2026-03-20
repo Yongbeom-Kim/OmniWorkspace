@@ -179,6 +179,22 @@ WORKSPACE_REPOS_KEY="repos"
 WORKSPACE_BRANCH_KEY="branch"
 WORKSPACE_DIRECTORY_KEY="dir"
 
+# layer: {
+# 	"<layer_name>": {
+#		"files": [
+# 			{
+# 				"path": "<relative_path>",
+# 				"contents": "<file_contents>",
+# 			}
+# 		]
+# 	}
+# }
+LAYER_KEY="layer"
+LAYER_DESCRIPTION_KEY="description"
+LAYER_FILES_KEY="files"
+LAYER_FILE_RELATIVE_PATH_KEY="path"
+LAYER_FILE_CONTENTS_KEY="contents"
+
 # global: {
 #   "editor": "<editor command>"
 # }
@@ -256,6 +272,7 @@ Shortcuts:
     exec <name> <command>     Shortcut for 'workspace exec'
     checkout (co) <name> <b>  Shortcut for 'workspace checkout'
     cd <name>                 Shortcut for 'workspace cd'
+    layer (l)                 Shortcut for 'workspace layer'
 
 Setup:
     install                   Install bash completions
@@ -312,6 +329,10 @@ Maintenance:
 		shift
 		cmd__workspace__cd "$@"
 		;;
+	"layer" | "l")
+		shift
+		cmd__layer "$@"
+		;;
 	"install")
 		shift
 		cmd__completions__install "$@"
@@ -350,11 +371,16 @@ Sub-commands:
     reset-hard-to-origin <name>    Fetch and hard reset all repos to upstream
     run-hooks <name>               Run post-copy hooks for all repos
     cd <name>                      Print the workspace directory path
+    layer <sub-command>            Manage workspace layers
 "
 
 	debug "$*"
 
 	case ${1:-} in
+	"layer")
+		shift
+		cmd__layer "$@"
+		;;
 	"add" | "add-repo" | "create")
 		shift
 		cmd__workspace__add "$@"
@@ -639,6 +665,104 @@ Runs the post-copy hook for each repo in the workspace that has one configured.
 	workspace__run_hooks "$workspace_name"
 }
 
+################
+### Layers ###
+################
+
+# Completions in completion__bash_layer
+cmd__layer() {
+	local USAGE="
+
+Usage:
+    $SCRIPT_NAME layer <sub-command> [args]
+    $SCRIPT_NAME workspace layer <sub-command> [args]
+
+Sub-commands:
+    save <workspace> <layer_name>  Save workspace layer files to config
+    load <workspace> <layer_name>  Load layer files from config into workspace
+    list                           List all saved layers
+    delete <layer_name>            Delete a saved layer
+"
+
+	debug "$*"
+
+	case ${1:-} in
+	"save")
+		shift
+		cmd__layer__save "$@"
+		;;
+	"load")
+		shift
+		cmd__layer__load "$@"
+		;;
+	"list")
+		shift
+		cmd__layer__list "$@"
+		;;
+	"delete")
+		shift
+		cmd__layer__delete "$@"
+		;;
+	*)
+		fatal "Error: unknown sub-command '${1:-}'.$USAGE"
+		;;
+	esac
+}
+
+cmd__layer__save() {
+	local USAGE="
+
+Usage (layer save):
+    $SCRIPT_NAME layer save <workspace_name> <layer_name>
+"
+
+	debug "$*"
+
+	local workspace_name="${1:?"Error: workspace name is required.$USAGE"}"
+	validate_name "$workspace_name" "workspace name"
+	local layer_name="${2:?"Error: layer name is required.$USAGE"}"
+	validate_name "$layer_name" "layer name"
+
+	layer__save "$workspace_name" "$layer_name"
+}
+
+cmd__layer__load() {
+	local USAGE="
+
+Usage (layer load):
+    $SCRIPT_NAME layer load <workspace_name> <layer_name>
+"
+
+	debug "$*"
+
+	local workspace_name="${1:?"Error: workspace name is required.$USAGE"}"
+	validate_name "$workspace_name" "workspace name"
+	local layer_name="${2:?"Error: layer name is required.$USAGE"}"
+	validate_name "$layer_name" "layer name"
+
+	layer__load "$workspace_name" "$layer_name"
+}
+
+cmd__layer__list() {
+	debug "$*"
+	config__layer__list
+}
+
+cmd__layer__delete() {
+	local USAGE="
+
+Usage (layer delete):
+    $SCRIPT_NAME layer delete <layer_name>
+"
+
+	debug "$*"
+
+	local layer_name="${1:?"Error: layer name is required.$USAGE"}"
+	validate_name "$layer_name" "layer name"
+
+	config__layer__delete__idempotent "$layer_name"
+}
+
 ####################
 ### Repositories ###
 ####################
@@ -884,7 +1008,7 @@ completion__bash() {
 	local cmds
 
 	if [[ $COMP_CWORD -eq 1 ]]; then
-		cmds=("workspaces" "wss" "workspace" "ws" "w" "wsp" "repos" "rs" "repo" "r" "exec" "checkout" "co" "cd" "install" "update")
+		cmds=("workspaces" "wss" "workspace" "ws" "w" "wsp" "repos" "rs" "repo" "r" "exec" "checkout" "co" "cd" "layer" "l" "install" "update")
 		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
 		return 0
 	fi
@@ -895,6 +1019,9 @@ completion__bash() {
 		;;
 	"repo" | "r")
 		completion__bash_repo
+		;;
+	"layer" | "l")
+		completion__bash_layer
 		;;
 	esac
 }
@@ -917,7 +1044,7 @@ completion__bash_workspace() {
 
 	# Position 2: subcommand
 	if [[ $COMP_CWORD -eq 2 ]]; then
-		cmds=("add" "create" "add-repo" "remove-repo" "delete" "list" "exec" "checkout" "pull" "reset-hard-to-origin" "run-hooks" "cd")
+		cmds=("add" "create" "add-repo" "remove-repo" "delete" "list" "exec" "checkout" "pull" "reset-hard-to-origin" "run-hooks" "cd" "layer")
 		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
 		return 0
 	fi
@@ -942,6 +1069,10 @@ completion__bash_workspace() {
 	"add" | "add-repo" | "create")
 		cmds=($(config__repo__list))
 		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+		return 0
+		;;
+	"layer") # delegate to layer completer with offset for 'workspace layer'
+		completion__bash_layer 1
 		return 0
 		;;
 	"remove-repo") # only suggest repos inside the selected workspace
@@ -981,6 +1112,60 @@ completion__bash_repo() {
 	"remove" | "pull" | "reset-to-origin")
 		cmds=($(config__repo__list))
 		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+		return 0
+		;;
+	esac
+}
+
+# offset param allows reuse from 'workspace layer' (offset=1) vs 'layer' (offset=0)
+completion__bash_layer() {
+	local cur="${COMP_WORDS[COMP_CWORD]}"
+	local cmds=()
+	local offset="${1:-0}"
+
+	# Position 2+offset: subcommand (save, load, list, delete)
+	if [[ $COMP_CWORD -eq $((2 + offset)) ]]; then
+		cmds=("save" "load" "list" "delete")
+		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+		return 0
+	fi
+
+	local subcmd="${COMP_WORDS[$((2 + offset))]}"
+
+	case "$subcmd" in
+	"list")
+		return 0
+		;;
+	"delete")
+		# Position 3+offset: layer name
+		if [[ $COMP_CWORD -eq $((3 + offset)) ]]; then
+			cmds=($(config__layer__list))
+			COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+		fi
+		return 0
+		;;
+	"save")
+		# Position 3+offset: workspace name
+		if [[ $COMP_CWORD -eq $((3 + offset)) ]]; then
+			cmds=($(config__workspace__list))
+			COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+		# Position 4+offset: layer name
+		elif [[ $COMP_CWORD -eq $((4 + offset)) ]]; then
+			cmds=($(config__layer__list))
+			COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+		fi
+		return 0
+		;;
+	"load")
+		# Position 3+offset: workspace name
+		if [[ $COMP_CWORD -eq $((3 + offset)) ]]; then
+			cmds=($(config__workspace__list))
+			COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+		# Position 4+offset: layer name
+		elif [[ $COMP_CWORD -eq $((4 + offset)) ]]; then
+			cmds=($(config__layer__list))
+			COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+		fi
 		return 0
 		;;
 	esac
@@ -1646,6 +1831,97 @@ repo__set_post_copy_hook() {
 	config__repo__put "$repo" "$repo_obj"
 }
 
+########################################
+##### High-Level Layer Management #####
+########################################
+
+layer__save() {
+	debug "$*"
+	local workspace_name="${1:?}"
+	local layer_name="${2:?}"
+	local layer_desc="${3:-}"
+
+	local workspace_obj
+	workspace_obj=$(config__workspace__get "$workspace_name")
+	local workspace_dir
+	workspace_dir=$(fs__workspace_get_dir "$workspace_name")
+
+	# Build excluded subpaths (repo directories within workspace)
+	local excluded_subpaths=()
+	local repos
+	repos=$(config__workspace__obj_get_repos "$workspace_obj")
+	while IFS= read -r repo; do
+		[[ -z "$repo" ]] && continue
+		excluded_subpaths+=("$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo")")
+	done <<< "$repos"
+
+	# Read non-repo files from workspace dir
+	local file_args=()
+	while IFS= read -r file_path; do
+		[[ -z "$file_path" ]] && continue
+		local relative_path="${file_path#"$workspace_dir"/}"
+		local contents
+		contents=$(cat "$file_path" | base64)
+		file_args+=("$relative_path" "$contents")
+	done <<< "$(fs__layer__get__files "$workspace_dir" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}")"
+
+	# Create layer object and save to config
+	local layer_obj
+	layer_obj=$(config__layer__obj_create "$layer_desc" "${file_args[@]+"${file_args[@]}"}")
+	config__layer__put "$layer_name" "$layer_obj"
+}
+
+layer__load() {
+	debug "$*"
+	local workspace_name="${1:?}"
+	local layer_name="${2:?}"
+
+	local workspace_obj
+	workspace_obj=$(config__workspace__get "$workspace_name")
+	local workspace_dir
+	workspace_dir=$(fs__workspace_get_dir "$workspace_name")
+
+	# Build excluded subpaths (repo directories within workspace)
+	local excluded_subpaths=()
+	local repos
+	repos=$(config__workspace__obj_get_repos "$workspace_obj")
+	while IFS= read -r repo; do
+		[[ -z "$repo" ]] && continue
+		excluded_subpaths+=("$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo")")
+	done <<< "$repos"
+
+	# Get layer from config
+	local layer_obj
+	if ! layer_obj=$(config__layer__get "$layer_name"); then
+		fatal "Layer '$layer_name' not found"
+	fi
+
+	# Clear existing non-repo files
+	fs__layer__clear "$workspace_dir" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}"
+
+	# Extract file path/contents pairs from layer object
+	local files
+	files=$(config__layer__obj_get_files "$layer_obj")
+
+	local file_args=()
+	local num_files
+	num_files=$(echo "$files" | yq 'length')
+
+	local i
+	for (( i=0; i<num_files; i++ )); do
+		local path contents
+		path=$(echo "$files" | yq -r ".[$i].\"${LAYER_FILE_RELATIVE_PATH_KEY}\"")
+		contents=$(echo "$files" | yq -r ".[$i].\"${LAYER_FILE_CONTENTS_KEY}\"")
+		[[ -z "$path" || "$path" == "null" ]] && continue
+		local full_path="$workspace_dir/$path"
+		mkdir -p "$(dirname "$full_path")"
+		file_args+=("$full_path" "$contents")
+	done
+
+	# Write layer files to workspace
+	fs__layer__write "$workspace_dir" "${file_args[@]+"${file_args[@]}"}"
+}
+
 ###############################
 ##### Yaml Configurations #####
 ###############################
@@ -1964,6 +2240,135 @@ config__create_file_if_not_exist() {
 	fi
 }
 
+##################################
+##### Yaml File Layer Config #####
+##################################
+
+config__layer__put() {
+	debug "$*"
+	config__create_file_if_not_exist
+	local layer_name="${1:?}"
+	local layer_obj="${2:?}"
+
+	layer_name="${layer_name}" layer_obj="${layer_obj}" yq -i ".[\"${LAYER_KEY}\"].[\"${layer_name}\"] = env(layer_obj)" "$CONFIG_FILE_PATH"
+}
+
+config__layer__delete__idempotent() {
+	debug "$*"
+	config__create_file_if_not_exist
+	local layer_name="${1:?}"
+
+	yq -i "del(.[\"${LAYER_KEY}\"].[\"${layer_name}\"])" "$CONFIG_FILE_PATH"
+}
+
+config__layer__list() {
+	debug "$*"
+	config__create_file_if_not_exist
+
+	local result
+	result=$(yq ".[\"${LAYER_KEY}\"] | keys | .[]" "$CONFIG_FILE_PATH" 2>/dev/null) || true
+
+	if [[ -n "$result" && "$result" != "null" ]]; then
+		echo "$result"
+	fi
+}
+
+config__layer__get() {
+	debug "$*"
+	config__create_file_if_not_exist
+
+	local layer_name="${1:?}"
+
+	local result
+	result=$(yq -r ".[\"${LAYER_KEY}\"].[\"${layer_name}\"]" "$CONFIG_FILE_PATH")
+
+	if [[ "$result" == "null" ]]; then
+		return 1
+	fi
+
+	# Merge: defaults (base) * stored (override) -- stored wins
+	local defaults
+	defaults=$(config__layer__obj_defaults "$layer_name")
+	echo "$defaults" | result="$result" yq '. * env(result)'
+}
+
+config__layer__obj_create() {
+	debug "$*"
+
+	local layer_desc="${1:?}"
+	shift
+
+	if [[ $(($# % 2)) -ne 0 ]]; then
+		fatal "[config__layer__obj_create] assertion error: should have even number of arguments after the description."
+	fi
+
+	local result
+	result=$(layer_desc="$layer_desc" yq -n "{\"${LAYER_DESCRIPTION_KEY}\": strenv(layer_desc), \"${LAYER_FILES_KEY}\": []}")
+
+	while [[ $# -gt 0 ]]; do
+		local path="$1"
+		local contents="$2"
+		shift 2
+		result=$(echo "$result" | path="$path" contents="$contents" yq ".[\"${LAYER_FILES_KEY}\"] += [{\"${LAYER_FILE_RELATIVE_PATH_KEY}\": strenv(path), \"${LAYER_FILE_CONTENTS_KEY}\": strenv(contents)}]")
+	done
+
+	echo "$result"
+}
+
+config__layer__obj_defaults() {
+	debug "$*"
+
+	echo "{
+		\"${LAYER_DESCRIPTION_KEY}\": \"\",
+		\"${LAYER_FILES_KEY}\": []
+	}" | yq "."
+}
+
+config__layer__obj_get_description() {
+	debug "$*"
+	local layer_obj="${1:?}"
+
+	echo "$layer_obj" | yq -r ".[\"${LAYER_DESCRIPTION_KEY}\"]" | yq__normalize_null
+}
+
+config__layer__obj_set_description() {
+	debug "$*"
+	local layer_obj="${1:?}" value="${2:?}"
+
+	echo "$layer_obj" | value="$value" yq ".[\"${LAYER_DESCRIPTION_KEY}\"] = strenv(value)"
+}
+
+config__layer__obj_get_files() {
+	debug "$*"
+	local layer_obj="${1:?}"
+
+	echo "$layer_obj" | yq -r ".[\"${LAYER_FILES_KEY}\"]" | yq__normalize_null
+}
+
+config__layer__obj_set_files() {
+	debug "$*"
+	local layer_obj="${1:?}"
+	shift
+
+	if [[ $(($# % 2)) -ne 0 ]]; then
+		fatal "[config__layer__obj_set_files] assertion error: should have even number of arguments (path/contents pairs)."
+	fi
+
+	local result
+	result=$(echo "$layer_obj" | yq ".[\"${LAYER_FILES_KEY}\"] = []")
+
+	while [[ $# -gt 0 ]]; do
+		local path="$1"
+		local contents="$2"
+		shift 2
+		result=$(echo "$result" | path="$path" contents="$contents" yq ".[\"${LAYER_FILES_KEY}\"] += [{\"${LAYER_FILE_RELATIVE_PATH_KEY}\": strenv(path), \"${LAYER_FILE_CONTENTS_KEY}\": strenv(contents)}]")
+	done
+
+	echo "$result"
+}
+
+
+
 #######################
 ##### Git Facades #####
 #######################
@@ -2244,6 +2649,97 @@ fs__workspace_get_dir() {
 	fi
 
 	echo "$WORKSPACES_DIR/$workspace_name"
+}
+
+fs__layer__read() {
+	local dir_path="${1:?}"
+	shift
+	local excluded_subpaths=("${@+"$@"}")
+
+	while IFS= read -r file_path; do
+		[[ -z "$file_path" ]] && continue
+		echo "$file_path"
+		cat "$file_path" | base64
+	done <<< "$(fs__layer__get__files "$dir_path" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}")"
+}
+
+fs__layer__clear() {
+	local dir_path="${1:?}"
+	shift
+	local excluded_subpaths=("${@+"$@"}")
+
+	while IFS= read -r file_path; do
+		[[ -z "$file_path" ]] && continue
+		rm -f "$file_path"
+	done <<< "$(fs__layer__get__files "$dir_path" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}")"
+
+	while IFS= read -r dir_entry; do
+		[[ -z "$dir_entry" ]] && continue
+		rmdir "$dir_entry" 2>/dev/null || true
+	done <<< "$(fs__layer__get__dirs "$dir_path" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}")"
+}
+
+fs__layer__write() {
+	local dir_path="${1:?}"
+	shift
+
+	if [[ $(($# % 2)) -ne 0 ]]; then
+		fatal "[fs__layer__write] assertion error: should have even number of arguments after the directory path."
+	fi
+
+	local args=("$@")
+	local i
+	for (( i=0; i<${#args[@]}; i=i+2 )); do
+		local path="${args[$i]}"
+		if [[ -e "$path" ]]; then
+			warn "Error while writing layered files: $path already exists"
+			return 1
+		fi
+	done
+
+	while [[ $# -gt 0 ]]; do
+		local path="$1"
+		local contents="$2"
+		shift 2
+		debug "Writing contents into file $path"
+		echo "$contents" | base64 -d > "$path"
+	done
+}
+
+fs__layer__get__files() {
+	local dir_path="${1:?}"
+	shift
+	local excluded_subpaths=("${@+"$@"}")
+
+	local find_args=("$dir_path" "(")
+
+	for subpath in "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}"; do
+		if [[ -z "${subpath}" ]]; then
+			continue
+		fi
+		find_args+=("-path" "$subpath" "-o")
+	done
+
+	find_args+=("-prune" ")" "-o" "-type" "f" "-print")
+	find "${find_args[@]}"
+}
+
+fs__layer__get__dirs() {
+	local dir_path="${1:?}"
+	shift
+	local excluded_subpaths=("${@+"$@"}")
+
+	local find_args=("$dir_path" "(")
+
+	for subpath in "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}"; do
+		if [[ -z "${subpath}" ]]; then
+			continue
+		fi
+		find_args+=("-path" "$subpath" "-o")
+	done
+
+	find_args+=("-prune" ")" "-o" "-type" "d" "-print")
+	find "${find_args[@]}"
 }
 
 # lock (mkdir-based, atomic on all filesystems)
