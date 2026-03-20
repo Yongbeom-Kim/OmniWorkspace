@@ -747,3 +747,60 @@ tests:
     verify:
     |-
       ows workspace layer list | grep -q ws-sub-layer
+
+  - name: "Layer save without layer name uses linked layer"
+    prepare:
+    |-
+      ows workspace add layer-linked-ws
+      echo "v1" > ~/.ows/workspaces/layer-linked-ws/data.txt
+    test:
+    |-
+      # First save with explicit layer name to establish the link
+      ows layer save layer-linked-ws linked-layer
+      # Update the file
+      echo "v2" > ~/.ows/workspaces/layer-linked-ws/data.txt
+      # Save again without specifying layer name
+      ows layer save layer-linked-ws
+    verify:
+    |-
+      # Load the layer and verify updated content was saved
+      rm ~/.ows/workspaces/layer-linked-ws/data.txt
+      ows layer load layer-linked-ws linked-layer
+      content=$(cat ~/.ows/workspaces/layer-linked-ws/data.txt)
+      if [ "$content" != "v2" ]; then
+        echo "FAIL: expected data.txt content=v2, got: $content" >&2
+        exit 1
+      fi
+
+  - name: "Layer save without layer name fails when no layer linked"
+    prepare:
+    |-
+      ows workspace add layer-no-link-ws
+      echo "data" > ~/.ows/workspaces/layer-no-link-ws/file.txt
+    test:
+    |-
+      # Should fail because no layer is linked
+      ! ows layer save layer-no-link-ws
+    verify:
+    |-
+      true
+
+  - name: "Layer load without layer name uses linked layer"
+    prepare:
+    |-
+      ows workspace add layer-load-linked-ws
+      echo "original" > ~/.ows/workspaces/layer-load-linked-ws/data.txt
+      ows layer save layer-load-linked-ws load-linked-layer
+    test:
+    |-
+      # Remove the file
+      rm ~/.ows/workspaces/layer-load-linked-ws/data.txt
+      # Load without specifying layer name (should use linked layer)
+      ows layer load layer-load-linked-ws
+    verify:
+    |-
+      content=$(cat ~/.ows/workspaces/layer-load-linked-ws/data.txt)
+      if [ "$content" != "original" ]; then
+        echo "FAIL: expected data.txt content=original, got: $content" >&2
+        exit 1
+      fi

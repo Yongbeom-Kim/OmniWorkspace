@@ -172,12 +172,14 @@ REPO_POST_COPY_HOOK_DEFAULT_VALUE=$'#!/bin/bash\n# Even if there is a shebang he
 #       "repos": ["<repo_name>", ...]
 #       "branch": "<branch_name>"
 #       "dir": "<workspace directory path>"
+#       "layer": "<layer_name>" | null
 #   }
 # }
 WORKSPACE_KEY="workspaces"
 WORKSPACE_REPOS_KEY="repos"
 WORKSPACE_BRANCH_KEY="branch"
 WORKSPACE_DIRECTORY_KEY="dir"
+WORKSPACE_LAYER_KEY="layer"
 
 # layer: {
 # 	"<layer_name>": {
@@ -713,15 +715,33 @@ cmd__layer__save() {
 	local USAGE="
 
 Usage (layer save):
-    $SCRIPT_NAME layer save <workspace_name> <layer_name>
+    $SCRIPT_NAME layer save <workspace_name> [<layer_name>]
+
+If <layer_name> is omitted, the workspace's linked layer is used.
 "
 
 	debug "$*"
 
+	local curr_workspace
+	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace); then
+		info "Workspace detected as $curr_workspace"
+		set -- "$curr_workspace" "$@"
+	fi
+
 	local workspace_name="${1:?"Error: workspace name is required.$USAGE"}"
 	validate_name "$workspace_name" "workspace name"
-	local layer_name="${2:?"Error: layer name is required.$USAGE"}"
-	validate_name "$layer_name" "layer name"
+
+	local layer_name="${2:-}"
+	if [[ -z "$layer_name" ]]; then
+		local ws_obj
+		ws_obj=$(config__workspace__get "$workspace_name")
+		layer_name=$(config__workspace__obj_get_layer "$ws_obj")
+		if [[ -z "$layer_name" ]]; then
+			fatal "Error: no layer linked to workspace '$workspace_name'. Please specify a layer name.$USAGE"
+		fi
+	else
+		validate_name "$layer_name" "layer name"
+	fi
 
 	layer__save "$workspace_name" "$layer_name"
 }
@@ -730,15 +750,33 @@ cmd__layer__load() {
 	local USAGE="
 
 Usage (layer load):
-    $SCRIPT_NAME layer load <workspace_name> <layer_name>
+    $SCRIPT_NAME layer load <workspace_name> [<layer_name>]
+
+If <layer_name> is omitted, the workspace's linked layer is used.
 "
 
 	debug "$*"
 
+	local curr_workspace
+	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace); then
+		info "Workspace detected as $curr_workspace"
+		set -- "$curr_workspace" "$@"
+	fi
+
 	local workspace_name="${1:?"Error: workspace name is required.$USAGE"}"
 	validate_name "$workspace_name" "workspace name"
-	local layer_name="${2:?"Error: layer name is required.$USAGE"}"
-	validate_name "$layer_name" "layer name"
+
+	local layer_name="${2:-}"
+	if [[ -z "$layer_name" ]]; then
+		local ws_obj
+		ws_obj=$(config__workspace__get "$workspace_name")
+		layer_name=$(config__workspace__obj_get_layer "$ws_obj")
+		if [[ -z "$layer_name" ]]; then
+			fatal "Error: no layer linked to workspace '$workspace_name'. Please specify a layer name.$USAGE"
+		fi
+	else
+		validate_name "$layer_name" "layer name"
+	fi
 
 	layer__load "$workspace_name" "$layer_name"
 }
@@ -1872,6 +1910,10 @@ layer__save() {
 	local layer_obj
 	layer_obj=$(config__layer__obj_create "$layer_desc" "${args[@]+"${args[@]}"}")
 	config__layer__put "$layer_name" "$layer_obj"
+
+	# Link layer to workspace
+	workspace_obj=$(config__workspace__obj_set_layer "$workspace_obj" "$layer_name")
+	config__workspace__put "$workspace_name" "$workspace_obj"
 }
 
 layer__load() {
@@ -2115,6 +2157,20 @@ config__workspace__obj_set_directory() {
 	local workspace_obj="${1:?}" dir="${2:?}"
 
 	echo "$workspace_obj" | yq -r ".[\"${WORKSPACE_DIRECTORY_KEY}\"] = \"$dir\""
+}
+
+config__workspace__obj_get_layer() {
+	debug "$*"
+	local workspace_obj="${1:?}"
+
+	echo "$workspace_obj" | yq -r ".[\"${WORKSPACE_LAYER_KEY}\"]" | yq__normalize_null
+}
+
+config__workspace__obj_set_layer() {
+	debug "$*"
+	local workspace_obj="${1:?}" layer_name="${2:?}"
+
+	echo "$workspace_obj" | yq -r ".[\"${WORKSPACE_LAYER_KEY}\"] = \"$layer_name\""
 }
 
 ########################
