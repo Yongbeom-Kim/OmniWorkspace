@@ -750,8 +750,8 @@ If no repositories are specified, pulls all registered repositories.
 
 	debug "$*"
 	repo__validate_all
-	for name in "$@"; do 
-		validate_name "$name" "repo name";
+	for name in "$@"; do
+		validate_name "$name" "repo name"
 	done
 	repo__pull "$@"
 }
@@ -768,8 +768,8 @@ If no repositories are specified, resets all registered repositories.
 
 	debug "$*"
 	repo__validate_all
-	for name in "$@";
-		do validate_name "$name" "repo name";
+	for name in "$@"; do
+		validate_name "$name" "repo name"
 	done
 	repo__reset_to_origin "$@"
 }
@@ -1143,6 +1143,41 @@ workspace__cd() {
 	cd "$workspace_dir" && "$SHELL"
 }
 
+workspace__check_branch_conflicts_by_repo() {
+	debug "$*"
+	local workspace_name="$1"
+	local branch_name="$2"
+
+	local ws_obj
+	ws_obj=$(config__workspace__get "$workspace_name")
+	local target_repos=($(config__workspace__obj_get_repos "$ws_obj"))
+
+	local all_workspaces=($(config__workspace__list))
+	for other_ws in "${all_workspaces[@]+"${all_workspaces[@]}"}"; do
+		if [[ -z "$other_ws" ]] || [[ "$other_ws" == "$workspace_name" ]]; then
+			continue
+		fi
+
+		local other_obj
+		other_obj=$(config__workspace__get "$other_ws") || continue
+		local other_branch
+		other_branch="$(config__workspace__obj_get_branch "$other_obj")"
+
+		if [[ "$other_branch" != "$branch_name" ]]; then
+			continue
+		fi
+
+		local other_repos=($(config__workspace__obj_get_repos "$other_obj"))
+		for target_repo in "${target_repos[@]+"${target_repos[@]}"}"; do
+			for other_repo in "${other_repos[@]+"${other_repos[@]}"}"; do
+				if [[ "$target_repo" == "$other_repo" ]]; then
+					fatal "Failed to checkout branch $branch_name for workspace $workspace_name: Repo $target_repo already has branch $branch_name checked out in workspace $other_ws."
+				fi
+			done
+		done
+	done
+}
+
 workspace__checkout__branch() {
 	debug "$*"
 	workspace__validate_all
@@ -1159,26 +1194,47 @@ workspace__checkout__branch() {
 
 	local repos=($(config__workspace__obj_get_repos "$ws_obj"))
 
-	if config__workspace__test_branch_exists "$branch_name"; then
-		local current_branch
-		current_branch=$(config__workspace__obj_get_branch "$ws_obj")
-		if [[ "$current_branch" != "$branch_name" ]]; then
-			fatal "Failed to set branch for workspace $workspace_name: Branch $branch_name already exists in a different workspace."
-		fi
+	local old_branch
+	old_branch=$(config__workspace__obj_get_branch "$ws_obj")
+
+	if [[ "$old_branch" == "$branch_name" ]]; then
+		return 0
 	fi
+
+	workspace__check_branch_conflicts_by_repo "$workspace_name" "$branch_name"
+
+	local successful_repos=()
+	for repo_name in "${repos[@]+"${repos[@]}"}"; do
+		local destination_worktree_dir
+		destination_worktree_dir="$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo_name")"
+		if ! git__checkout_branch_on_worktree "$destination_worktree_dir" "$branch_name"; then
+			# Rollback successful repos
+			local rollback_failed=0
+			for rollback_repo in "${successful_repos[@]+"${successful_repos[@]}"}"; do
+				local rollback_dir
+				rollback_dir="$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$rollback_repo")"
+				if ! git__checkout_branch_on_worktree "$rollback_dir" "$old_branch"; then
+					warn "Failed to rollback repo $rollback_repo to branch $old_branch."
+					rollback_failed=1
+				fi
+			done
+			if [[ "$rollback_failed" -eq 1 ]]; then
+				fatal "Failed to checkout branch $branch_name for workspace $workspace_name: repo $repo_name checkout failed. Some repos could not be rolled back. Manual cleanup may be needed."
+			else
+				fatal "Failed to checkout branch $branch_name for workspace $workspace_name: repo $repo_name checkout failed. All changes have been rolled back."
+			fi
+		fi
+		successful_repos+=("$repo_name")
+	done
 
 	ws_obj=$(config__workspace__obj_set_branch "$ws_obj" "$branch_name")
 	if ! config__workspace__put "$workspace_name" "$ws_obj"; then
-		fatal "Failed to checkout branch $branch_name for workspace $workspace_name"
+		fatal "Failed to save branch $branch_name for workspace $workspace_name to config"
 	fi
 
 	for repo_name in "${repos[@]+"${repos[@]}"}"; do
 		local destination_worktree_dir
 		destination_worktree_dir="$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo_name")"
-		if ! git__checkout_branch_on_worktree "$destination_worktree_dir" "$branch_name"; then
-			warn "Failed to checkout branch $branch_name for repo $repo_name ($destination_worktree_dir) under workspace $workspace_name"
-			continue
-		fi
 		git__set_upstream_branch "$destination_worktree_dir" "$branch_name" || true
 	done
 }
@@ -1631,31 +1687,6 @@ config__workspace__exists() {
 	yq -e ".[\"${WORKSPACE_KEY}\"].[\"${workspace_name}\"] != null" "$CONFIG_FILE_PATH" &>/dev/null
 }
 
-config__workspace__test_branch_exists() {
-	debug "$*"
-	config__create_file_if_not_exist
-
-	local branch_name="${1:?}"
-	local workspaces
-
-	workspaces=($(config__workspace__list))
-	for workspace_name in "${workspaces[@]+"${workspaces[@]}"}"; do
-		if [[ -z "$workspace_name" ]]; then
-			continue
-		fi
-		local ws_obj current_branch
-		ws_obj=$(config__workspace__get "$workspace_name") || continue
-		current_branch="$(config__workspace__obj_get_branch "$ws_obj")"
-		if [[ "$current_branch" == "$branch_name" ]]; then
-			debug "Found branch $branch_name"
-			return 0
-		fi
-	done
-
-	debug "Did not find $branch_name"
-	return 1
-}
-
 config__workspace__list() {
 	debug "$*"
 	config__create_file_if_not_exist
@@ -1810,9 +1841,9 @@ config__repo__obj_create() {
 	# Factory default dir gets overwritten by explicit repo_dir from caller
 	local defaults
 	defaults=$(config__repo__obj_defaults "$repo_name")
-	echo "$defaults" | \
+	echo "$defaults" |
 		repo_originurl="$repo_originurl" repo_dir="$repo_dir" \
-		yq ". * {\"${REPO_ORIGINURL_KEY}\": env(repo_originurl), \"${REPO_DIRECTORY_KEY}\": env(repo_dir)}"
+			yq ". * {\"${REPO_ORIGINURL_KEY}\": env(repo_originurl), \"${REPO_DIRECTORY_KEY}\": env(repo_dir)}"
 }
 
 config__repo__obj_defaults() {
