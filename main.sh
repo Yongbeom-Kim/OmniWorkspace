@@ -259,19 +259,29 @@ Shortcuts:
 
 Setup:
     install                   Install bash completions
+
+Maintenance:
+    update                    Update ows to the latest version
 "
 	fs__acquire_lock
 	trap 'debug "Error on line $LINENO in ${FUNCNAME[0]:-main}"; debug_stack_trace; fs__release_lock' ERR EXIT SIGINT SIGTERM
 
 	debug "$*"
-	dependency__assert_git
-	dependency__assert_yq
 
 	local cmd="${1:-}"
 
 	if [[ -z "$cmd" ]]; then
 		fatal "Error: command is required.$USAGE"
 	fi
+
+	if [[ "$cmd" == "update" ]]; then
+		shift
+		cmd__update "$@"
+		return $?
+	fi
+
+	dependency__assert_git
+	dependency__assert_yq
 
 	case "$cmd" in
 	"workspaces" | "wss")
@@ -833,12 +843,48 @@ EOF
 	fi
 }
 
+cmd__update() {
+	debug "$*"
+	dependency__assert "curl"
+
+	local ows_path
+	ows_path=$(command -v ows)
+
+	if [[ -L "$ows_path" ]]; then
+		fatal "You're running a dev install. Update your repo with git pull instead."
+	fi
+
+	local tmpfile
+	tmpfile=$(fs__tempfile__safe_create)
+
+	if ! curl -fsSL "https://raw.githubusercontent.com/Yongbeom-Kim/OmniWorkspace/refs/heads/main/main.sh" -o "$tmpfile"; then
+		fs__tempfile__clean "$tmpfile"
+		fatal "Failed to download update. Check your network connection."
+	fi
+
+	if cmp -s "$ows_path" "$tmpfile"; then
+		fs__tempfile__clean "$tmpfile"
+		echo "Already up to date."
+		return 0
+	fi
+
+	echo "Update available. Installing..."
+	chmod +x "$tmpfile"
+	if ! sudo cp "$tmpfile" "$ows_path"; then
+		fs__tempfile__clean "$tmpfile"
+		fatal "Failed to install update."
+	fi
+
+	fs__tempfile__clean "$tmpfile"
+	echo "Update complete. The new version will be used on your next invocation."
+}
+
 completion__bash() {
 	local cur="${COMP_WORDS[COMP_CWORD]}"
 	local cmds
 
 	if [[ $COMP_CWORD -eq 1 ]]; then
-		cmds=("workspaces" "wss" "workspace" "ws" "w" "wsp" "repos" "rs" "repo" "r" "exec" "checkout" "co" "cd" "install")
+		cmds=("workspaces" "wss" "workspace" "ws" "w" "wsp" "repos" "rs" "repo" "r" "exec" "checkout" "co" "cd" "install" "update")
 		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
 		return 0
 	fi
@@ -891,10 +937,20 @@ completion__bash_workspace() {
 		esac
 	fi
 
-	# Position 4+: repo names for add/remove-repo
+	# Position 4+: repo names for add/add-repo/create
 	case "$subcmd" in
-	"add" | "add-repo" | "create" | "remove-repo")
+	"add" | "add-repo" | "create")
 		cmds=($(config__repo__list))
+		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+		return 0
+		;;
+	"remove-repo") # only suggest repos inside the selected workspace
+		local ws_name="${COMP_WORDS[3]}"
+		local ws_obj
+		if ! ws_obj=$(config__workspace__get "$ws_name" 2>/dev/null); then
+			return 0
+		fi
+		cmds=($(config__workspace__obj_get_repos "$ws_obj"))
 		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
 		return 0
 		;;
