@@ -120,6 +120,21 @@ ows workspace run-hooks <name>                 # Run post-copy hooks for all rep
 
 **Command aliases:** `workspace` can be shortened to `ws`, `w`, or `wsp`. `repo` can be shortened to `r`.
 
+### Layers
+
+Layers let you snapshot and restore the non-repo files in a workspace (config files, notes, scripts — anything that isn't inside a git repo directory). This is useful for switching between different workspace configurations without losing setup.
+
+```bash
+ows layer save <workspace> <layer_name>    # Snapshot non-repo files into a named layer
+ows layer load <workspace> <layer_name>    # Restore a layer (clears existing non-repo files first)
+ows layer list                             # List all saved layers
+ows layer delete <layer_name>              # Delete a saved layer
+```
+
+`layer` can also be accessed as a workspace subcommand (`ows workspace layer save ...`) and can be shortened to `l`.
+
+When loading a layer, existing non-repo files in the workspace are cleared before the layer's files are written. Repo directories are never touched.
+
 ### Post-Copy Hooks
 
 You can attach a bash script to any repo that runs automatically after a worktree is created (e.g., when adding a repo to a workspace). This is useful for running install steps, builds, or other setup.
@@ -186,6 +201,12 @@ workspaces:
       - frontend
       - backend
     branch: feature/new-auth
+layer:
+  my-layer:
+    description: my-layer
+    files:
+      - relative_path: notes.txt
+        contents: <base64-encoded content>
 ```
 
 The default data directory is `~/.ows`. Override with environment variables:
