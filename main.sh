@@ -680,10 +680,13 @@ Usage:
     $SCRIPT_NAME workspace layer <sub-command> [args]
 
 Sub-commands:
-    save <workspace> <layer_name>  Save workspace layer files to config
-    load <workspace> <layer_name>  Load layer files from config into workspace
-    list                           List all saved layers
-    delete <layer_name>            Delete a saved layer
+    save <workspace> [<layer_name>] [--desc \"description\"]
+                                    Save workspace layer files to config
+    load <workspace> <layer_name>   Load layer files from config into workspace
+    list                            List all saved layers
+    set-description (set-desc) <layer_name> \"description\"
+                                    Set description for an existing layer
+    delete <layer_name>             Delete a saved layer
 "
 
 	debug "$*"
@@ -705,6 +708,10 @@ Sub-commands:
 		shift
 		cmd__layer__delete "$@"
 		;;
+	"set-description" | "set-desc")
+		shift
+		cmd__layer__set_description "$@"
+		;;
 	*)
 		fatal "Error: unknown sub-command '${1:-}'.$USAGE"
 		;;
@@ -715,12 +722,29 @@ cmd__layer__save() {
 	local USAGE="
 
 Usage (layer save):
-    $SCRIPT_NAME layer save <workspace_name> [<layer_name>]
+    $SCRIPT_NAME layer save <workspace_name> [<layer_name>] [--desc|--description \"description\"]
 
 If <layer_name> is omitted, the workspace's linked layer is used.
 "
 
 	debug "$*"
+
+	# Strip --desc/--description flag before positional arg parsing
+	local desc_flag=""
+	local clean_args=()
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		"--desc" | "--description")
+			desc_flag="${2:?"Error: --desc requires a value.$USAGE"}"
+			shift 2
+			;;
+		*)
+			clean_args+=("$1")
+			shift
+			;;
+		esac
+	done
+	set -- "${clean_args[@]+"${clean_args[@]}"}"
 
 	local curr_workspace
 	if ! config__workspace__exists "${1:-}" && curr_workspace=$(env__get_caller_workspace); then
@@ -743,7 +767,7 @@ If <layer_name> is omitted, the workspace's linked layer is used.
 		validate_name "$layer_name" "layer name"
 	fi
 
-	layer__save "$workspace_name" "$layer_name"
+	layer__save "$workspace_name" "$layer_name" "$desc_flag"
 }
 
 cmd__layer__load() {
@@ -783,7 +807,18 @@ If <layer_name> is omitted, the workspace's linked layer is used.
 
 cmd__layer__list() {
 	debug "$*"
-	config__layer__list
+	local layers=($(config__layer__list))
+	local cells=()
+
+	for layer in "${layers[@]+"${layers[@]}"}"; do
+		[[ -z "$layer" ]] && continue
+		local layer_obj
+		layer_obj=$(config__layer__get "$layer")
+		cells+=("$layer")
+		cells+=("$(config__layer__obj_get_description "$layer_obj")")
+	done
+
+	print_table_horizontally 2 "name" "description" "${cells[@]+"${cells[@]}"}"
 }
 
 cmd__layer__delete() {
@@ -799,6 +834,32 @@ Usage (layer delete):
 	validate_name "$layer_name" "layer name"
 
 	config__layer__delete__idempotent "$layer_name"
+}
+
+cmd__layer__set_description() {
+	local USAGE="
+
+Usage (layer set-description):
+    $SCRIPT_NAME layer set-description <layer_name> \"description\"
+    $SCRIPT_NAME layer set-desc <layer_name> \"description\"
+
+Sets the description for an existing layer.
+"
+
+	debug "$*"
+
+	local layer_name="${1:?"Error: layer name is required.$USAGE"}"
+	validate_name "$layer_name" "layer name"
+
+	local description="${2:?"Error: description is required.$USAGE"}"
+
+	local layer_obj
+	if ! layer_obj=$(config__layer__get "$layer_name"); then
+		fatal "Error: layer '$layer_name' not found.$USAGE"
+	fi
+
+	layer_obj=$(config__layer__obj_set_description "$layer_obj" "$description")
+	config__layer__put "$layer_name" "$layer_obj"
 }
 
 ####################
@@ -1163,7 +1224,7 @@ completion__bash_layer() {
 
 	# Position 2+offset: subcommand (save, load, list, delete)
 	if [[ $COMP_CWORD -eq $((2 + offset)) ]]; then
-		cmds=("save" "load" "list" "delete")
+		cmds=("save" "load" "list" "delete" "set-description" "set-desc")
 		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
 		return 0
 	fi
@@ -1175,6 +1236,14 @@ completion__bash_layer() {
 		return 0
 		;;
 	"delete")
+		# Position 3+offset: layer name
+		if [[ $COMP_CWORD -eq $((3 + offset)) ]]; then
+			cmds=($(config__layer__list))
+			COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
+		fi
+		return 0
+		;;
+	"set-description" | "set-desc")
 		# Position 3+offset: layer name
 		if [[ $COMP_CWORD -eq $((3 + offset)) ]]; then
 			cmds=($(config__layer__list))
@@ -1877,7 +1946,18 @@ layer__save() {
 	debug "$*"
 	local workspace_name="${1:?}"
 	local layer_name="${2:?}"
-	local layer_desc="${3:-$layer_name}"
+	local layer_desc="${3:-}"
+
+	# Description resolution: explicit > existing > layer name
+	if [[ -z "$layer_desc" ]]; then
+		local existing_obj
+		if existing_obj=$(config__layer__get "$layer_name" 2>/dev/null); then
+			layer_desc=$(config__layer__obj_get_description "$existing_obj")
+		fi
+		if [[ -z "$layer_desc" ]]; then
+			layer_desc="$layer_name"
+		fi
+	fi
 
 	local workspace_obj
 	workspace_obj=$(config__workspace__get "$workspace_name")

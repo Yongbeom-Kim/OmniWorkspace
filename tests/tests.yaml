@@ -804,3 +804,145 @@ tests:
         echo "FAIL: expected data.txt content=original, got: $content" >&2
         exit 1
       fi
+
+  - name: "Layer save defaults description to layer name for new layers"
+    prepare:
+    |-
+      ows workspace add layer-desc-default-ws
+      echo "data" > ~/.ows/workspaces/layer-desc-default-ws/file.txt
+    test:
+    |-
+      ows layer save layer-desc-default-ws desc-default-layer
+    verify:
+    |-
+      desc=$(yq -r '.layer.desc-default-layer.description' ~/.ows/config.yaml)
+      if [ "$desc" != "desc-default-layer" ]; then
+        echo "FAIL: expected description=desc-default-layer, got: $desc" >&2
+        exit 1
+      fi
+
+  - name: "Layer save with --desc flag sets description"
+    prepare:
+    |-
+      ows workspace add layer-desc-flag-ws
+      echo "data" > ~/.ows/workspaces/layer-desc-flag-ws/file.txt
+    test:
+    |-
+      ows layer save layer-desc-flag-ws desc-flag-layer --desc "my custom description"
+    verify:
+    |-
+      desc=$(yq -r '.layer.desc-flag-layer.description' ~/.ows/config.yaml)
+      if [ "$desc" != "my custom description" ]; then
+        echo "FAIL: expected description='my custom description', got: $desc" >&2
+        exit 1
+      fi
+
+  - name: "Layer save with --description flag sets description"
+    prepare:
+    |-
+      ows workspace add layer-longdesc-ws
+      echo "data" > ~/.ows/workspaces/layer-longdesc-ws/file.txt
+    test:
+    |-
+      ows layer save layer-longdesc-ws longdesc-layer --description "long form description"
+    verify:
+    |-
+      desc=$(yq -r '.layer.longdesc-layer.description' ~/.ows/config.yaml)
+      if [ "$desc" != "long form description" ]; then
+        echo "FAIL: expected description='long form description', got: $desc" >&2
+        exit 1
+      fi
+
+  - name: "Layer save preserves existing description when --desc omitted"
+    prepare:
+    |-
+      ows workspace add layer-preserve-ws
+      echo "v1" > ~/.ows/workspaces/layer-preserve-ws/file.txt
+      ows layer save layer-preserve-ws preserve-layer --desc "original desc"
+    test:
+    |-
+      echo "v2" > ~/.ows/workspaces/layer-preserve-ws/file.txt
+      ows layer save layer-preserve-ws preserve-layer
+    verify:
+    |-
+      desc=$(yq -r '.layer.preserve-layer.description' ~/.ows/config.yaml)
+      if [ "$desc" != "original desc" ]; then
+        echo "FAIL: expected description='original desc', got: $desc" >&2
+        exit 1
+      fi
+
+  - name: "Layer set-description updates description"
+    prepare:
+    |-
+      ows workspace add layer-setdesc-ws
+      echo "data" > ~/.ows/workspaces/layer-setdesc-ws/file.txt
+      ows layer save layer-setdesc-ws setdesc-layer
+    test:
+    |-
+      ows layer set-description setdesc-layer "updated description"
+    verify:
+    |-
+      desc=$(yq -r '.layer.setdesc-layer.description' ~/.ows/config.yaml)
+      if [ "$desc" != "updated description" ]; then
+        echo "FAIL: expected description='updated description', got: $desc" >&2
+        exit 1
+      fi
+
+  - name: "Layer set-desc alias works"
+    prepare:
+    |-
+      ows workspace add layer-setdesc-alias-ws
+      echo "data" > ~/.ows/workspaces/layer-setdesc-alias-ws/file.txt
+      ows layer save layer-setdesc-alias-ws setdesc-alias-layer
+    test:
+    |-
+      ows layer set-desc setdesc-alias-layer "alias description"
+    verify:
+    |-
+      desc=$(yq -r '.layer.setdesc-alias-layer.description' ~/.ows/config.yaml)
+      if [ "$desc" != "alias description" ]; then
+        echo "FAIL: expected description='alias description', got: $desc" >&2
+        exit 1
+      fi
+
+  - name: "Layer set-description on non-existent layer fails"
+    prepare:
+    |-
+      true
+    test:
+    |-
+      ! ows layer set-description nonexistent-layer "some desc"
+    verify:
+    |-
+      true
+
+  - name: "Layer list shows descriptions in table format"
+    prepare:
+    |-
+      ows workspace add layer-tbl-ws
+      echo "a" > ~/.ows/workspaces/layer-tbl-ws/a.txt
+      ows layer save layer-tbl-ws tbl-layer-alpha --desc "first layer"
+      echo "b" > ~/.ows/workspaces/layer-tbl-ws/b.txt
+      ows layer save layer-tbl-ws tbl-layer-beta --desc "second layer"
+    test:
+    |-
+      ows layer list
+    verify:
+    |-
+      output=$(ows layer list)
+      if ! echo "$output" | grep -q "tbl-layer-alpha"; then
+        echo "FAIL: layer list should contain tbl-layer-alpha" >&2
+        exit 1
+      fi
+      if ! echo "$output" | grep -q "first layer"; then
+        echo "FAIL: layer list should contain description 'first layer'" >&2
+        exit 1
+      fi
+      if ! echo "$output" | grep -q "tbl-layer-beta"; then
+        echo "FAIL: layer list should contain tbl-layer-beta" >&2
+        exit 1
+      fi
+      if ! echo "$output" | grep -q "second layer"; then
+        echo "FAIL: layer list should contain description 'second layer'" >&2
+        exit 1
+      fi
