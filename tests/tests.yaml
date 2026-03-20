@@ -514,3 +514,236 @@ tests:
         echo "FAIL: Hello-World should have been rolled back, but is on my-rollback-branch" >&2
         exit 1
       fi
+
+  - name: "Layer save and load roundtrip with repos"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows workspace add layer-rt Hello-World
+      # Create non-repo files in workspace
+      echo "hello" > ~/.ows/workspaces/layer-rt/notes.txt
+      mkdir -p ~/.ows/workspaces/layer-rt/config
+      echo "key=value" > ~/.ows/workspaces/layer-rt/config/settings.ini
+    test:
+    |-
+      ows layer save layer-rt my-layer
+      # Remove the original files
+      rm ~/.ows/workspaces/layer-rt/notes.txt
+      rm -rf ~/.ows/workspaces/layer-rt/config
+      # Load them back
+      ows layer load layer-rt my-layer
+    verify:
+    |-
+      # Verify files restored with correct contents
+      content=$(cat ~/.ows/workspaces/layer-rt/notes.txt)
+      if [ "$content" != "hello" ]; then
+        echo "FAIL: expected notes.txt content=hello, got: $content" >&2
+        exit 1
+      fi
+      content=$(cat ~/.ows/workspaces/layer-rt/config/settings.ini)
+      if [ "$content" != "key=value" ]; then
+        echo "FAIL: expected settings.ini content=key=value, got: $content" >&2
+        exit 1
+      fi
+      # Verify repo directory was not affected
+      if [ ! -e ~/.ows/workspaces/layer-rt/Hello-World/.git ]; then
+        echo "FAIL: repo .git should still exist" >&2
+        exit 1
+      fi
+
+  - name: "Layer save on workspace with no repos"
+    prepare:
+    |-
+      ows workspace add layer-no-repo
+      echo "standalone" > ~/.ows/workspaces/layer-no-repo/file.txt
+    test:
+    |-
+      ows layer save layer-no-repo no-repo-layer
+    verify:
+    |-
+      # Verify layer was saved in config
+      ows layer list | grep -q no-repo-layer
+      # Load it back after clearing
+      rm ~/.ows/workspaces/layer-no-repo/file.txt
+      ows layer load layer-no-repo no-repo-layer
+      content=$(cat ~/.ows/workspaces/layer-no-repo/file.txt)
+      if [ "$content" != "standalone" ]; then
+        echo "FAIL: expected file.txt content=standalone, got: $content" >&2
+        exit 1
+      fi
+
+  - name: "Layer save on empty workspace saves empty layer"
+    prepare:
+    |-
+      ows workspace add layer-empty
+    test:
+    |-
+      ows layer save layer-empty empty-layer
+    verify:
+    |-
+      ows layer list | grep -q empty-layer
+      file_count=$(yq '.layer.empty-layer.files | length' ~/.ows/config.yaml)
+      if [ "$file_count" != "0" ]; then
+        echo "FAIL: expected 0 files in empty layer, got: $file_count" >&2
+        exit 1
+      fi
+
+  - name: "Layer load clears existing non-repo files"
+    prepare:
+    |-
+      ows repo add https://github.com/octocat/Hello-World.git
+      ows workspace add layer-clear Hello-World
+      echo "original" > ~/.ows/workspaces/layer-clear/old-file.txt
+      ows layer save layer-clear clear-layer
+      # Add a different file that should be cleared on load
+      echo "extra" > ~/.ows/workspaces/layer-clear/extra-file.txt
+    test:
+    |-
+      ows layer load layer-clear clear-layer
+    verify:
+    |-
+      # Original file should be restored
+      if [ ! -f ~/.ows/workspaces/layer-clear/old-file.txt ]; then
+        echo "FAIL: old-file.txt should be restored by layer load" >&2
+        exit 1
+      fi
+      # Extra file should have been cleared
+      if [ -f ~/.ows/workspaces/layer-clear/extra-file.txt ]; then
+        echo "FAIL: extra-file.txt should have been cleared by layer load" >&2
+        exit 1
+      fi
+
+  - name: "Layer list shows saved layers"
+    prepare:
+    |-
+      ows workspace add layer-list-ws
+      echo "a" > ~/.ows/workspaces/layer-list-ws/a.txt
+      ows layer save layer-list-ws alpha-layer
+      echo "b" > ~/.ows/workspaces/layer-list-ws/b.txt
+      ows layer save layer-list-ws beta-layer
+    test:
+    |-
+      ows layer list
+    verify:
+    |-
+      ows layer list | grep -q alpha-layer
+      ows layer list | grep -q beta-layer
+
+  - name: "Layer delete removes layer from config"
+    prepare:
+    |-
+      ows workspace add layer-del-ws
+      echo "data" > ~/.ows/workspaces/layer-del-ws/data.txt
+      ows layer save layer-del-ws del-layer
+    test:
+    |-
+      ows layer delete del-layer
+    verify:
+    |-
+      result=$(yq -r '.layer.del-layer' ~/.ows/config.yaml)
+      if [ "$result" != "null" ]; then
+        echo "FAIL: layer should be removed from config, got: $result" >&2
+        exit 1
+      fi
+
+  - name: "Layer delete non-existent is idempotent"
+    prepare:
+    |-
+      true
+    test:
+    |-
+      ows layer delete nonexistent-layer
+    verify:
+    |-
+      true
+
+  - name: "Layer load non-existent layer fails"
+    prepare:
+    |-
+      ows workspace add layer-noexist
+    test:
+    |-
+      ! ows layer load layer-noexist no-such-layer
+    verify:
+    |-
+      true
+
+  - name: "Layer shortcut alias works"
+    prepare:
+    |-
+      ows workspace add layer-alias-ws
+      echo "alias-test" > ~/.ows/workspaces/layer-alias-ws/alias.txt
+    test:
+    |-
+      ows l save layer-alias-ws alias-layer
+    verify:
+    |-
+      ows l list | grep -q alias-layer
+
+  - name: "Layer save preserves nested directory structure"
+    prepare:
+    |-
+      ows workspace add layer-nested
+      mkdir -p ~/.ows/workspaces/layer-nested/a/b/c
+      echo "deep" > ~/.ows/workspaces/layer-nested/a/b/c/deep.txt
+      echo "mid" > ~/.ows/workspaces/layer-nested/a/b/mid.txt
+      echo "top" > ~/.ows/workspaces/layer-nested/a/top.txt
+    test:
+    |-
+      ows layer save layer-nested nested-layer
+      rm -rf ~/.ows/workspaces/layer-nested/a
+      ows layer load layer-nested nested-layer
+    verify:
+    |-
+      content=$(cat ~/.ows/workspaces/layer-nested/a/b/c/deep.txt)
+      if [ "$content" != "deep" ]; then
+        echo "FAIL: expected deep.txt content=deep, got: $content" >&2
+        exit 1
+      fi
+      content=$(cat ~/.ows/workspaces/layer-nested/a/b/mid.txt)
+      if [ "$content" != "mid" ]; then
+        echo "FAIL: expected mid.txt content=mid, got: $content" >&2
+        exit 1
+      fi
+      content=$(cat ~/.ows/workspaces/layer-nested/a/top.txt)
+      if [ "$content" != "top" ]; then
+        echo "FAIL: expected top.txt content=top, got: $content" >&2
+        exit 1
+      fi
+
+  - name: "Layer save with files containing spaces in names"
+    prepare:
+    |-
+      ows workspace add layer-spaces
+      echo "spaced" > ~/.ows/workspaces/layer-spaces/"file with spaces.txt"
+      mkdir -p ~/.ows/workspaces/layer-spaces/"dir with spaces"
+      echo "also spaced" > ~/.ows/workspaces/layer-spaces/"dir with spaces/inner file.txt"
+    test:
+    |-
+      ows layer save layer-spaces spaces-layer
+      rm -rf ~/.ows/workspaces/layer-spaces/"file with spaces.txt" ~/.ows/workspaces/layer-spaces/"dir with spaces"
+      ows layer load layer-spaces spaces-layer
+    verify:
+    |-
+      content=$(cat ~/.ows/workspaces/layer-spaces/"file with spaces.txt")
+      if [ "$content" != "spaced" ]; then
+        echo "FAIL: expected spaced file content=spaced, got: $content" >&2
+        exit 1
+      fi
+      content=$(cat ~/.ows/workspaces/layer-spaces/"dir with spaces/inner file.txt")
+      if [ "$content" != "also spaced" ]; then
+        echo "FAIL: expected inner spaced file content=also spaced, got: $content" >&2
+        exit 1
+      fi
+
+  - name: "Workspace layer subcommand works"
+    prepare:
+    |-
+      ows workspace add ws-layer-sub
+      echo "ws-sub" > ~/.ows/workspaces/ws-layer-sub/ws-sub.txt
+    test:
+    |-
+      ows workspace layer save ws-layer-sub ws-sub-layer
+    verify:
+    |-
+      ows workspace layer list | grep -q ws-sub-layer

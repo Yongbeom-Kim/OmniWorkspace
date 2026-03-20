@@ -1839,14 +1839,13 @@ layer__save() {
 	debug "$*"
 	local workspace_name="${1:?}"
 	local layer_name="${2:?}"
-	local layer_desc="${3:-}"
+	local layer_desc="${3:-$layer_name}"
 
 	local workspace_obj
 	workspace_obj=$(config__workspace__get "$workspace_name")
 	local workspace_dir
 	workspace_dir=$(fs__workspace_get_dir "$workspace_name")
 
-	# Build excluded subpaths (repo directories within workspace)
 	local excluded_subpaths=()
 	local repos
 	repos=$(config__workspace__obj_get_repos "$workspace_obj")
@@ -1855,19 +1854,23 @@ layer__save() {
 		excluded_subpaths+=("$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo")")
 	done <<< "$repos"
 
-	# Read non-repo files from workspace dir
-	local file_args=()
-	while IFS= read -r file_path; do
-		[[ -z "$file_path" ]] && continue
-		local relative_path="${file_path#"$workspace_dir"/}"
-		local contents
-		contents=$(cat "$file_path" | base64)
-		file_args+=("$relative_path" "$contents")
-	done <<< "$(fs__layer__get__files "$workspace_dir" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}")"
+	# Read non-repo files from workspace dir (alternating path/base64 lines)
+	local args=()
+	while IFS= read -r line; do
+		[[ -z "$line" ]] && continue
+		args+=("$line")
+	done <<< "$(fs__layer__read "$workspace_dir" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}")"
+
+	local i
+	for (( i=0; i<${#args[@]}; i=i+2 )); do
+		if ! args[$i]=$(fs__create_relative_file_path "${args[$i]}" "$workspace_dir"); then
+			fatal "File '${args[$i]}' is not inside workspace directory '$workspace_dir'"
+		fi
+	done
 
 	# Create layer object and save to config
 	local layer_obj
-	layer_obj=$(config__layer__obj_create "$layer_desc" "${file_args[@]+"${file_args[@]}"}")
+	layer_obj=$(config__layer__obj_create "$layer_desc" "${args[@]+"${args[@]}"}")
 	config__layer__put "$layer_name" "$layer_obj"
 }
 
@@ -1881,7 +1884,6 @@ layer__load() {
 	local workspace_dir
 	workspace_dir=$(fs__workspace_get_dir "$workspace_name")
 
-	# Build excluded subpaths (repo directories within workspace)
 	local excluded_subpaths=()
 	local repos
 	repos=$(config__workspace__obj_get_repos "$workspace_obj")
@@ -1919,7 +1921,9 @@ layer__load() {
 	done
 
 	# Write layer files to workspace
-	fs__layer__write "$workspace_dir" "${file_args[@]+"${file_args[@]}"}"
+	if ! fs__layer__write "$workspace_dir" "${file_args[@]+"${file_args[@]}"}"; then
+		fatal "Failed to write layer files to workspace '$workspace_name'. Some files already exist in the workspace directory."
+	fi
 }
 
 ###############################
@@ -2659,7 +2663,7 @@ fs__layer__read() {
 	while IFS= read -r file_path; do
 		[[ -z "$file_path" ]] && continue
 		echo "$file_path"
-		cat "$file_path" | base64
+		env__portable_base64_encode < "$file_path"
 	done <<< "$(fs__layer__get__files "$dir_path" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}")"
 }
 
@@ -2673,10 +2677,17 @@ fs__layer__clear() {
 		rm -f "$file_path"
 	done <<< "$(fs__layer__get__files "$dir_path" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}")"
 
+	# Remove empty directories bottom-up (reverse order so children before parents)
+	local dirs=()
 	while IFS= read -r dir_entry; do
 		[[ -z "$dir_entry" ]] && continue
-		rmdir "$dir_entry" 2>/dev/null || true
+		dirs+=("$dir_entry")
 	done <<< "$(fs__layer__get__dirs "$dir_path" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}")"
+
+	local i
+	for (( i=${#dirs[@]}-1; i>=0; i-- )); do
+		rmdir "${dirs[$i]}" 2>/dev/null || true
+	done
 }
 
 fs__layer__write() {
@@ -2702,44 +2713,55 @@ fs__layer__write() {
 		local contents="$2"
 		shift 2
 		debug "Writing contents into file $path"
-		echo "$contents" | base64 -d > "$path"
+		echo "$contents" | env__portable_base64_decode > "$path"
 	done
+}
+
+# Common find helper: fs__layer__find <dir_path> <find_type> <extra_find_args...> -- <excluded_subpaths...>
+fs__layer__find() {
+	local dir_path="${1:?}"
+	local find_type="${2:?}"
+	shift 2
+
+	# Collect extra find args before "--"
+	local extra_args=()
+	while [[ $# -gt 0 && "$1" != "--" ]]; do
+		extra_args+=("$1")
+		shift
+	done
+	[[ "${1:-}" == "--" ]] && shift
+
+	if [[ $# -eq 0 ]]; then
+		find "$dir_path" "${extra_args[@]+"${extra_args[@]}"}" -type "$find_type" -print
+		return 0
+	fi
+
+	local prune_expr=("(")
+	local first=true
+	for subpath in "$@"; do
+		[[ -z "$subpath" ]] && continue
+		if [[ "$first" == true ]]; then
+			first=false
+		else
+			prune_expr+=("-o")
+		fi
+		prune_expr+=("-path" "$subpath")
+	done
+	prune_expr+=(")" "-prune" "-o")
+
+	find "$dir_path" "${extra_args[@]+"${extra_args[@]}"}" "${prune_expr[@]}" -type "$find_type" -print
 }
 
 fs__layer__get__files() {
 	local dir_path="${1:?}"
 	shift
-	local excluded_subpaths=("${@+"$@"}")
-
-	local find_args=("$dir_path" "(")
-
-	for subpath in "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}"; do
-		if [[ -z "${subpath}" ]]; then
-			continue
-		fi
-		find_args+=("-path" "$subpath" "-o")
-	done
-
-	find_args+=("-prune" ")" "-o" "-type" "f" "-print")
-	find "${find_args[@]}"
+	fs__layer__find "$dir_path" f -- "$@"
 }
 
 fs__layer__get__dirs() {
 	local dir_path="${1:?}"
 	shift
-	local excluded_subpaths=("${@+"$@"}")
-
-	local find_args=("$dir_path" "(")
-
-	for subpath in "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}"; do
-		if [[ -z "${subpath}" ]]; then
-			continue
-		fi
-		find_args+=("-path" "$subpath" "-o")
-	done
-
-	find_args+=("-prune" ")" "-o" "-type" "d" "-print")
-	find "${find_args[@]}"
+	fs__layer__find "$dir_path" d -mindepth 1 -- "$@"
 }
 
 # lock (mkdir-based, atomic on all filesystems)
@@ -2815,6 +2837,21 @@ fs__safe_rm_rf() {
 
 	rm -rf "$resolved"
 }
+
+fs__create_relative_file_path() {
+	local file="${1:?}"
+	local directory="${2:?}"
+
+	# Ensure directory ends with / for prefix matching
+	local dir_prefix="${directory%/}/"
+
+	if [[ "$file" != "$dir_prefix"* ]]; then
+		return 1
+	fi
+
+	echo "${file#"$dir_prefix"}"
+}
+
 #############################
 ##### Dependency Checks #####
 #############################
@@ -2878,9 +2915,33 @@ const__get_repo_dir() {
 	echo "$REPOS_DIR/$repo_name"
 }
 
+env__portable_base64_encode() {
+	if env_is_macos; then
+		base64
+	else
+		base64 -w 0
+		echo
+	fi
+}
+
+env__portable_base64_decode() {
+	if env_is_macos; then
+		base64 -D
+	else
+		base64 -d
+	fi
+}
+
+_OWS_IS_MACOS=""
 env_is_macos() {
-	debug "$*"
-	[[ "$(uname)" == "Darwin" ]]
+	if [[ -z "$_OWS_IS_MACOS" ]]; then
+		if [[ "$(uname)" == "Darwin" ]]; then
+			_OWS_IS_MACOS=1
+		else
+			_OWS_IS_MACOS=0
+		fi
+	fi
+	[[ "$_OWS_IS_MACOS" == "1" ]]
 }
 
 env__get_caller_workspace() {
