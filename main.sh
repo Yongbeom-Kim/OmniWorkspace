@@ -1975,17 +1975,17 @@ layer__save() {
 	while IFS= read -r repo; do
 		[[ -z "$repo" ]] && continue
 		excluded_subpaths+=("$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo")")
-	done <<< "$repos"
+	done <<<"$repos"
 
 	# Read non-repo files from workspace dir (alternating path/base64 lines)
 	local args=()
 	while IFS= read -r line; do
 		[[ -z "$line" ]] && continue
 		args+=("$line")
-	done <<< "$(fs__layer__read "$workspace_dir" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}")"
+	done <<<"$(fs__layer__read "$workspace_dir" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}")"
 
 	local i
-	for (( i=0; i<${#args[@]}; i=i+2 )); do
+	for ((i = 0; i < ${#args[@]}; i = i + 2)); do
 		if ! args[$i]=$(fs__create_relative_file_path "${args[$i]}" "$workspace_dir"); then
 			fatal "File '${args[$i]}' is not inside workspace directory '$workspace_dir'"
 		fi
@@ -2017,7 +2017,7 @@ layer__load() {
 	while IFS= read -r repo; do
 		[[ -z "$repo" ]] && continue
 		excluded_subpaths+=("$(fs__workspace_get_repo_subtree_dir "$workspace_name" "$repo")")
-	done <<< "$repos"
+	done <<<"$repos"
 
 	# Get layer from config
 	local layer_obj
@@ -2037,7 +2037,7 @@ layer__load() {
 	num_files=$(echo "$files" | yq 'length')
 
 	local i
-	for (( i=0; i<num_files; i++ )); do
+	for ((i = 0; i < num_files; i++)); do
 		local path contents
 		path=$(echo "$files" | yq -r ".[$i].\"${LAYER_FILE_RELATIVE_PATH_KEY}\"")
 		contents=$(echo "$files" | yq -r ".[$i].\"${LAYER_FILE_CONTENTS_KEY}\"")
@@ -2512,8 +2512,6 @@ config__layer__obj_set_files() {
 	echo "$result"
 }
 
-
-
 #######################
 ##### Git Facades #####
 #######################
@@ -2804,8 +2802,8 @@ fs__layer__read() {
 	while IFS= read -r file_path; do
 		[[ -z "$file_path" ]] && continue
 		echo "$file_path"
-		env__portable_base64_encode < "$file_path"
-	done <<< "$(fs__layer__get__files "$dir_path" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}")"
+		env__portable_base64_encode <"$file_path"
+	done <<<"$(fs__layer__get__files "$dir_path" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}")"
 }
 
 fs__layer__clear() {
@@ -2816,17 +2814,17 @@ fs__layer__clear() {
 	while IFS= read -r file_path; do
 		[[ -z "$file_path" ]] && continue
 		rm -f "$file_path"
-	done <<< "$(fs__layer__get__files "$dir_path" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}")"
+	done <<<"$(fs__layer__get__files "$dir_path" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}")"
 
 	# Remove empty directories bottom-up (reverse order so children before parents)
 	local dirs=()
 	while IFS= read -r dir_entry; do
 		[[ -z "$dir_entry" ]] && continue
 		dirs+=("$dir_entry")
-	done <<< "$(fs__layer__get__dirs "$dir_path" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}")"
+	done <<<"$(fs__layer__get__dirs "$dir_path" "${excluded_subpaths[@]+"${excluded_subpaths[@]}"}")"
 
 	local i
-	for (( i=${#dirs[@]}-1; i>=0; i-- )); do
+	for ((i = ${#dirs[@]} - 1; i >= 0; i--)); do
 		rmdir "${dirs[$i]}" 2>/dev/null || true
 	done
 }
@@ -2841,7 +2839,7 @@ fs__layer__write() {
 
 	local args=("$@")
 	local i
-	for (( i=0; i<${#args[@]}; i=i+2 )); do
+	for ((i = 0; i < ${#args[@]}; i = i + 2)); do
 		local path="${args[$i]}"
 		if [[ -e "$path" ]]; then
 			warn "Error while writing layered files: $path already exists"
@@ -2854,7 +2852,7 @@ fs__layer__write() {
 		local contents="$2"
 		shift 2
 		debug "Writing contents into file $path"
-		echo "$contents" | env__portable_base64_decode > "$path"
+		echo "$contents" | env__portable_base64_decode >"$path"
 	done
 }
 
