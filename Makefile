@@ -1,4 +1,7 @@
-.PHONY: setup fmt test test-verbose test-smoke test-smoke-verbose
+.PHONY: install-dev setup fmt test test-verbose test-smoke test-smoke-verbose
+
+install-dev:
+	sudo ln -sf "$(CURDIR)/main.sh" /usr/local/bin/ows
 
 setup:
 	cp ./git-hooks/pre-commit ./.git/hooks/pre-commit
