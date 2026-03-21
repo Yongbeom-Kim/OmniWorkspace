@@ -3068,16 +3068,8 @@ env__portable_base64_decode() {
 	fi
 }
 
-_OWS_IS_MACOS=""
 env_is_macos() {
-	if [[ -z "$_OWS_IS_MACOS" ]]; then
-		if [[ "$(uname)" == "Darwin" ]]; then
-			_OWS_IS_MACOS=1
-		else
-			_OWS_IS_MACOS=0
-		fi
-	fi
-	[[ "$_OWS_IS_MACOS" == "1" ]]
+	[[ "$(uname)" == "Darwin" ]]
 }
 
 env__get_caller_workspace() {
