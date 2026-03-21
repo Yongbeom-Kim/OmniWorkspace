@@ -2145,7 +2145,11 @@ config__workspace__put() {
 config__workspace__exists() {
 	debug "$*"
 	config__create_file_if_not_exist
-	local workspace_name="${1:?}"
+	local workspace_name="${1:-}"
+
+	if [[ -z "$workspace_name" ]]; then
+		return 1
+	fi
 
 	yq -e ".[\"${WORKSPACE_KEY}\"].[\"${workspace_name}\"] != null" "$CONFIG_FILE_PATH" &>/dev/null
 }
