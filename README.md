@@ -129,6 +129,7 @@ ows layer save <workspace> [<layer_name>] [--desc "description"]
                                            # Snapshot non-repo files into a named layer
 ows layer load <workspace> <layer_name>    # Restore a layer (clears existing non-repo files first)
 ows layer list                             # List all saved layers with descriptions
+ows layers                                 # Shorthand for layer list
 ows layer set-description <layer_name> "description"
                                            # Set description for an existing layer
 ows layer delete <layer_name>              # Delete a saved layer

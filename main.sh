@@ -269,6 +269,7 @@ Commands:
     workspaces (wss)          List all workspaces
     repo (r)                  Manage repositories
     repos (rs)                List all repositories
+    layers                    List all saved layers
 
 Shortcuts:
     exec <name> <command>     Shortcut for 'workspace exec'
@@ -330,6 +331,10 @@ Maintenance:
 	"cd")
 		shift
 		cmd__workspace__cd "$@"
+		;;
+	"layers")
+		shift
+		cmd__layer__list "$@"
 		;;
 	"layer" | "l")
 		shift
@@ -1107,7 +1112,7 @@ completion__bash() {
 	local cmds
 
 	if [[ $COMP_CWORD -eq 1 ]]; then
-		cmds=("workspaces" "wss" "workspace" "ws" "w" "wsp" "repos" "rs" "repo" "r" "exec" "checkout" "co" "cd" "layer" "l" "install" "update")
+		cmds=("workspaces" "wss" "workspace" "ws" "w" "wsp" "repos" "rs" "repo" "r" "layers" "exec" "checkout" "co" "cd" "layer" "l" "install" "update")
 		COMPREPLY=($(compgen -W "${cmds[*]}" -- "$cur"))
 		return 0
 	fi
